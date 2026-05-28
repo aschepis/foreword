@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process';
 import { db } from '../db.js';
 import { getUnifiedDiff, getDiffFiles } from '../git.js';
 import { log } from '../log.js';
+import { runCommand } from './run-command.js';
 
 function fillTemplate(tpl, vars) {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in vars ? String(vars[k]) : ''));
@@ -70,22 +70,6 @@ function tryParseFindings(text) {
     } catch {}
   }
   return [];
-}
-
-function runCommand(command, input, cwd) {
-  return new Promise((resolve) => {
-    const child = spawn('sh', ['-c', command], { cwd, env: process.env });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => (stdout += d.toString()));
-    child.stderr.on('data', (d) => (stderr += d.toString()));
-    child.on('close', (code) => resolve({ code, stdout, stderr }));
-    child.on('error', (e) => resolve({ code: -1, stdout, stderr: stderr + '\n' + e.message }));
-    if (input) {
-      child.stdin.write(input);
-      child.stdin.end();
-    }
-  });
 }
 
 function buildDiffFileLineMap(diff) {

@@ -46,7 +46,7 @@ export const AGENT_PRESETS = {
     id: 'gemini',
     label: 'Gemini CLI',
     bin: 'gemini',
-    hint: 'Google\'s Gemini CLI. Use --yolo for non-interactive fix mode.',
+    hint: 'Google\'s Gemini CLI. The runner writes the prompt to a temp file and we point Gemini at it via its @file syntax, so even huge diffs don\'t hit ARG_MAX.',
     models: [
       { id: 'gemini-3-pro', label: 'Gemini 3 Pro' },
       { id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
@@ -54,8 +54,11 @@ export const AGENT_PRESETS = {
     defaultModel: 'gemini-3-pro',
     buildCommand: (model, kind) => {
       const m = model ? ` --model ${model}` : '';
-      if (kind === 'fix') return `gemini -p --yolo${m}`;
-      return `gemini -p${m}`;
+      /* The runner exposes the rendered prompt at $LOCAL_REVIEW_PROMPT_FILE.
+         `@<path>` is Gemini CLI's file-inclusion syntax — it reads the file
+         into the prompt instead of passing it as argv, sidestepping ARG_MAX. */
+      if (kind === 'fix') return `gemini --yolo -p "@$LOCAL_REVIEW_PROMPT_FILE"${m}`;
+      return `gemini -p "@$LOCAL_REVIEW_PROMPT_FILE"${m}`;
     },
   },
   other: {

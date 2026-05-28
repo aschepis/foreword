@@ -1,36 +1,10 @@
-import { spawn } from 'node:child_process';
 import { db } from '../db.js';
 import { gitAt, resolveSha } from '../git.js';
 import { log } from '../log.js';
+import { runCommand } from './run-command.js';
 
 function fillTemplate(tpl, vars) {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in vars ? String(vars[k]) : ''));
-}
-
-function runCommand(command, input, cwd, timeoutMs) {
-  return new Promise((resolve) => {
-    const child = spawn('sh', ['-c', command], { cwd, env: process.env });
-    let stdout = '', stderr = '';
-    let timedOut = false;
-    const timer = timeoutMs ? setTimeout(() => {
-      timedOut = true;
-      try { child.kill('SIGTERM'); } catch {}
-    }, timeoutMs) : null;
-    child.stdout.on('data', (d) => (stdout += d.toString()));
-    child.stderr.on('data', (d) => (stderr += d.toString()));
-    child.on('close', (code) => {
-      if (timer) clearTimeout(timer);
-      resolve({ code, stdout, stderr, timedOut });
-    });
-    child.on('error', (e) => {
-      if (timer) clearTimeout(timer);
-      resolve({ code: -1, stdout, stderr: stderr + '\n' + e.message, timedOut });
-    });
-    if (input) {
-      child.stdin.write(input);
-      child.stdin.end();
-    }
-  });
 }
 
 function buildThreadContext(comment) {
