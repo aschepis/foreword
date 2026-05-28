@@ -1,24 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
-const EMPTY = {
+const EMPTY_AGENT = {
   name: '',
   command: '',
   prompt_template:
-    'You are a code reviewer. Review the following unified diff and respond ONLY with a JSON array of findings. Each finding must have: {"file": "path/relative/to/repo", "line": <line number in NEW file or null>, "severity": "info|warn|error", "message": "..."}.\n\nDiff:\n{{diff}}',
+    'You are a code reviewer. Review the following unified diff and respond ONLY with a JSON array of findings. Each finding must have: {"file": "path/relative/to/repo", "line": <line number in NEW file or null>, "severity": "info|warn|error", "message": "..."}.\n\n{{goals}}\nDiff:\n{{diff}}',
   enabled: 1,
+  include_goals: 0,
 };
+
+const EMPTY_GOAL = { title: '', body: '', enabled: 1 };
 
 export default function Settings() {
   const [agents, setAgents] = useState([]);
-  const [editing, setEditing] = useState(null);
+  const [goals, setGoals] = useState([]);
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [editingGoal, setEditingGoal] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [stats, setStats] = useState(null);
   const [adminBusy, setAdminBusy] = useState(false);
 
   async function load() {
-    setAgents(await api.agents.list());
+    const [a, g] = await Promise.all([api.agents.list(), api.goals.list()]);
+    setAgents(a); setGoals(g);
     try { setStats(await api.admin.stats()); } catch {}
   }
   useEffect(() => { load(); }, []);
@@ -26,7 +32,7 @@ export default function Settings() {
   async function clearReviews() {
     const msg = `Delete ALL ${stats?.reviews ?? '?'} review(s), ${stats?.comments ?? '?'} comment(s), ` +
                 `${stats?.agent_runs ?? '?'} agent run(s), and ${stats?.agent_findings ?? '?'} finding(s)?\n\n` +
-                `Repos, worktrees, and agent configs will be kept.\n\nThis cannot be undone.`;
+                `Repos, worktrees, agent configs, and goals will be kept.\n\nThis cannot be undone.`;
     if (!confirm(msg)) return;
     setAdminBusy(true);
     try { await api.admin.clearReviews(); await load(); }
@@ -35,7 +41,7 @@ export default function Settings() {
 
   async function clearAll() {
     const msg = `NUCLEAR: wipe EVERYTHING — repos, worktrees, reviews, comments, agent configs, ` +
-                `agent runs, findings, and settings.\n\nType "DELETE EVERYTHING" to confirm.`;
+                `goals, agent runs, findings, and settings.\n\nType "DELETE EVERYTHING" to confirm.`;
     const answer = prompt(msg);
     if (answer !== 'DELETE EVERYTHING') return;
     setAdminBusy(true);
@@ -43,69 +49,137 @@ export default function Settings() {
     finally { setAdminBusy(false); }
   }
 
-  async function save(e) {
+  async function saveAgent(e) {
     e.preventDefault();
     setBusy(true); setErr(null);
     try {
-      if (editing.id) await api.agents.update(editing.id, editing);
-      else await api.agents.create(editing);
-      setEditing(null);
+      if (editingAgent.id) await api.agents.update(editingAgent.id, editingAgent);
+      else await api.agents.create(editingAgent);
+      setEditingAgent(null);
       await load();
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   }
 
-  async function toggle(a) {
+  async function toggleAgent(a) {
     await api.agents.update(a.id, { enabled: a.enabled ? 0 : 1 });
     load();
   }
 
-  async function del(a) {
+  async function delAgent(a) {
     if (!confirm(`Delete agent "${a.name}"?`)) return;
     await api.agents.delete(a.id);
     load();
   }
 
+  async function saveGoal(e) {
+    e.preventDefault();
+    setBusy(true); setErr(null);
+    try {
+      if (editingGoal.id) await api.goals.update(editingGoal.id, editingGoal);
+      else await api.goals.create(editingGoal);
+      setEditingGoal(null);
+      await load();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function toggleGoal(g) {
+    await api.goals.update(g.id, { enabled: g.enabled ? 0 : 1 });
+    load();
+  }
+
+  async function delGoal(g) {
+    if (!confirm(`Delete goal "${g.title}"?`)) return;
+    await api.goals.delete(g.id);
+    load();
+  }
+
+  const enabledGoalCount = goals.filter((g) => g.enabled).length;
+
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-xl mb-4">Settings — AI agents</h1>
+    <div className="max-w-3xl mx-auto p-6 pb-12">
+      {/* ─── Goals ─── */}
+      <h1 className="text-xl mb-2">Review goals</h1>
       <p className="text-sm text-text-muted mb-4">
-        Configure shell commands that review diffs. Your prompt template will receive the placeholders{' '}
+        Persistent things you care about in every review (security gotchas, style rules,
+        domain-specific invariants). Agents that have <b>Include goals</b> turned on get these
+        injected into their prompt — either at the <code className="bg-bg-soft px-1 rounded">{'{{goals}}'}</code>{' '}
+        placeholder or auto-prepended.
+      </p>
+      <ul className="space-y-2 mb-3">
+        {goals.length === 0 && (
+          <li className="text-sm text-text-muted border border-dashed border-bg-line rounded p-4 text-center">
+            No goals yet. Add one to bias your AI reviews toward what matters.
+          </li>
+        )}
+        {goals.map((g) => (
+          <li key={g.id} className="bg-bg-soft border border-bg-line rounded p-3">
+            <div className="flex items-start gap-2">
+              <button onClick={() => toggleGoal(g)}
+                      className={`text-xs px-2 py-0.5 rounded shrink-0 ${g.enabled ? 'bg-accent-green/20 text-accent-green' : 'bg-bg-line text-text-muted'}`}>
+                {g.enabled ? 'enabled' : 'disabled'}
+              </button>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm">{g.title}</div>
+                {g.body && <div className="text-xs text-text-muted mt-0.5 whitespace-pre-wrap">{g.body}</div>}
+              </div>
+              <button onClick={() => setEditingGoal(g)} className="text-xs text-accent hover:underline">edit</button>
+              <button onClick={() => delGoal(g)} className="text-xs text-accent-red hover:underline">delete</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <button onClick={() => setEditingGoal(EMPTY_GOAL)} className="bg-accent text-bg font-semibold rounded px-3 py-2 text-sm">
+        + new goal
+      </button>
+
+      {/* ─── Agents ─── */}
+      <h1 className="text-xl mt-10 mb-2">AI agents</h1>
+      <p className="text-sm text-text-muted mb-4">
+        Shell commands that review diffs. Your prompt template receives{' '}
         <code className="bg-bg-soft px-1 rounded">{'{{diff}}'}</code>,{' '}
         <code className="bg-bg-soft px-1 rounded">{'{{file_paths}}'}</code>,{' '}
-        <code className="bg-bg-soft px-1 rounded">{'{{base}}'}</code>, and{' '}
-        <code className="bg-bg-soft px-1 rounded">{'{{head}}'}</code> on stdin. Output should be a JSON array
-        of findings (or contain one).
+        <code className="bg-bg-soft px-1 rounded">{'{{base}}'}</code>,{' '}
+        <code className="bg-bg-soft px-1 rounded">{'{{head}}'}</code>, and (when{' '}
+        <i>Include goals</i> is on) <code className="bg-bg-soft px-1 rounded">{'{{goals}}'}</code> on stdin.
+        Output should be a JSON array of findings.
       </p>
 
       <ul className="space-y-2 mb-4">
         {agents.map((a) => (
           <li key={a.id} className="bg-bg-soft border border-bg-line rounded p-3">
             <div className="flex items-center gap-2">
-              <button onClick={() => toggle(a)}
+              <button onClick={() => toggleAgent(a)}
                       className={`text-xs px-2 py-0.5 rounded ${a.enabled ? 'bg-accent-green/20 text-accent-green' : 'bg-bg-line text-text-muted'}`}>
                 {a.enabled ? 'enabled' : 'disabled'}
               </button>
               <div className="font-semibold">{a.name}</div>
+              {a.include_goals ? (
+                <span className="text-[10px] px-2 py-0.5 rounded bg-accent-purple/20 text-accent-purple"
+                      title={`Will receive ${enabledGoalCount} enabled goal${enabledGoalCount === 1 ? '' : 's'} in the prompt`}>
+                  🎯 goals ({enabledGoalCount})
+                </span>
+              ) : null}
               <div className="font-mono text-xs text-text-muted flex-1 truncate">{a.command}</div>
-              <button onClick={() => setEditing(a)} className="text-xs text-accent hover:underline">edit</button>
-              <button onClick={() => del(a)} className="text-xs text-accent-red hover:underline">delete</button>
+              <button onClick={() => setEditingAgent(a)} className="text-xs text-accent hover:underline">edit</button>
+              <button onClick={() => delAgent(a)} className="text-xs text-accent-red hover:underline">delete</button>
             </div>
           </li>
         ))}
       </ul>
-
-      <button onClick={() => setEditing(EMPTY)} className="bg-accent text-bg font-semibold rounded px-3 py-2 text-sm">
+      <button onClick={() => setEditingAgent(EMPTY_AGENT)} className="bg-accent text-bg font-semibold rounded px-3 py-2 text-sm">
         + new agent
       </button>
 
+      {/* ─── Danger zone ─── */}
       <div className="mt-10 border border-accent-red/40 rounded-lg p-4 bg-accent-red/5">
         <h2 className="font-semibold text-accent-red mb-2">Danger zone</h2>
         {stats && (
           <div className="text-xs text-text-muted font-mono mb-3">
             {stats.repos} repos · {stats.worktrees} worktrees · {stats.reviews} reviews ·{' '}
-            {stats.comments} comments · {stats.agent_configs} agents · {stats.agent_runs} runs ·{' '}
-            {stats.agent_findings} findings · {stats.file_reviewed} file-marks
+            {stats.comments} comments · {stats.agent_configs} agents · {stats.goals} goals ·{' '}
+            {stats.agent_runs} runs · {stats.agent_findings} findings · {stats.file_reviewed} file-marks
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -113,61 +187,103 @@ export default function Settings() {
             <div className="font-semibold text-sm mb-1">Clear all reviews</div>
             <div className="text-xs text-text-muted mb-3">
               Deletes every review, comment, file-reviewed mark, agent run, and finding.
-              Keeps your repos, worktrees, and configured agents.
+              Keeps repos, worktrees, agents, and goals.
             </div>
-            <button
-              onClick={clearReviews}
-              disabled={adminBusy}
-              className="text-sm bg-accent-yellow/20 text-accent-yellow rounded px-3 py-1.5 hover:bg-accent-yellow/30 disabled:opacity-50"
-            >Clear reviews</button>
+            <button onClick={clearReviews} disabled={adminBusy}
+                    className="text-sm bg-accent-yellow/20 text-accent-yellow rounded px-3 py-1.5 hover:bg-accent-yellow/30 disabled:opacity-50">
+              Clear reviews
+            </button>
           </div>
           <div className="border border-accent-red/40 rounded p-3 bg-bg-soft">
             <div className="font-semibold text-sm mb-1 text-accent-red">Clean slate</div>
             <div className="text-xs text-text-muted mb-3">
-              Wipes <b>everything</b> — including repos, agent configs, and settings.
-              Use when you want to start from scratch.
+              Wipes <b>everything</b> — including repos, agent configs, goals, and settings.
             </div>
-            <button
-              onClick={clearAll}
-              disabled={adminBusy}
-              className="text-sm bg-accent-red/20 text-accent-red rounded px-3 py-1.5 hover:bg-accent-red/30 disabled:opacity-50"
-            >Delete everything…</button>
+            <button onClick={clearAll} disabled={adminBusy}
+                    className="text-sm bg-accent-red/20 text-accent-red rounded px-3 py-1.5 hover:bg-accent-red/30 disabled:opacity-50">
+              Delete everything…
+            </button>
           </div>
         </div>
       </div>
 
-      {editing && (
+      {/* ─── Agent modal ─── */}
+      {editingAgent && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
-             onClick={() => setEditing(null)}>
-          <form onSubmit={save} onClick={(e) => e.stopPropagation()}
-                className="bg-bg-soft border border-bg-line rounded-lg p-4 w-full max-w-2xl space-y-3">
-            <h2 className="font-semibold">{editing.id ? 'Edit agent' : 'New agent'}</h2>
+             onClick={() => setEditingAgent(null)}>
+          <form onSubmit={saveAgent} onClick={(e) => e.stopPropagation()}
+                className="bg-bg-soft border border-bg-line rounded-lg p-4 w-full max-w-2xl space-y-3 max-h-[90vh] overflow-auto">
+            <h2 className="font-semibold">{editingAgent.id ? 'Edit agent' : 'New agent'}</h2>
             <label className="block">
               <div className="text-xs text-text-muted mb-1">Name</div>
               <input className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm"
-                     value={editing.name} onChange={(e) => setEditing({...editing, name: e.target.value})} />
+                     value={editingAgent.name} onChange={(e) => setEditingAgent({...editingAgent, name: e.target.value})} />
             </label>
             <label className="block">
               <div className="text-xs text-text-muted mb-1">Shell command — receives prompt on stdin</div>
               <input className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm font-mono"
-                     placeholder="e.g. claude -p --output-format text"
-                     value={editing.command} onChange={(e) => setEditing({...editing, command: e.target.value})} />
+                     placeholder="e.g. claude -p --output-format json"
+                     value={editingAgent.command} onChange={(e) => setEditingAgent({...editingAgent, command: e.target.value})} />
             </label>
             <label className="block">
               <div className="text-xs text-text-muted mb-1">Prompt template</div>
               <textarea rows={8}
                      className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm font-mono"
-                     value={editing.prompt_template}
-                     onChange={(e) => setEditing({...editing, prompt_template: e.target.value})} />
+                     value={editingAgent.prompt_template}
+                     onChange={(e) => setEditingAgent({...editingAgent, prompt_template: e.target.value})} />
+            </label>
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!!editingAgent.enabled}
+                       onChange={(e) => setEditingAgent({...editingAgent, enabled: e.target.checked ? 1 : 0})} />
+                Enabled
+              </label>
+              <label className="flex items-center gap-2 text-sm" title={`Adds ${enabledGoalCount} enabled goal(s) to the prompt`}>
+                <input type="checkbox" checked={!!editingAgent.include_goals}
+                       onChange={(e) => setEditingAgent({...editingAgent, include_goals: e.target.checked ? 1 : 0})} />
+                Include goals
+                <span className="text-xs text-text-muted">({enabledGoalCount} enabled)</span>
+              </label>
+            </div>
+            {err && <div className="text-accent-red text-sm">{err}</div>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingAgent(null)} className="text-text-muted text-sm px-3 py-1">cancel</button>
+              <button type="submit" disabled={busy} className="bg-accent text-bg font-semibold rounded px-3 py-1 text-sm">
+                {busy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ─── Goal modal ─── */}
+      {editingGoal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+             onClick={() => setEditingGoal(null)}>
+          <form onSubmit={saveGoal} onClick={(e) => e.stopPropagation()}
+                className="bg-bg-soft border border-bg-line rounded-lg p-4 w-full max-w-xl space-y-3">
+            <h2 className="font-semibold">{editingGoal.id ? 'Edit goal' : 'New goal'}</h2>
+            <label className="block">
+              <div className="text-xs text-text-muted mb-1">Title</div>
+              <input autoFocus className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm"
+                     placeholder="e.g. Audit-log every state-changing handler"
+                     value={editingGoal.title} onChange={(e) => setEditingGoal({...editingGoal, title: e.target.value})} />
+            </label>
+            <label className="block">
+              <div className="text-xs text-text-muted mb-1">Details (optional)</div>
+              <textarea rows={4}
+                     className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm"
+                     placeholder="Anything the reviewer should know — gotchas, prior incidents, examples."
+                     value={editingGoal.body} onChange={(e) => setEditingGoal({...editingGoal, body: e.target.value})} />
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!!editing.enabled}
-                     onChange={(e) => setEditing({...editing, enabled: e.target.checked ? 1 : 0})} />
+              <input type="checkbox" checked={!!editingGoal.enabled}
+                     onChange={(e) => setEditingGoal({...editingGoal, enabled: e.target.checked ? 1 : 0})} />
               Enabled
             </label>
             {err && <div className="text-accent-red text-sm">{err}</div>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setEditing(null)} className="text-text-muted text-sm px-3 py-1">cancel</button>
+              <button type="button" onClick={() => setEditingGoal(null)} className="text-text-muted text-sm px-3 py-1">cancel</button>
               <button type="submit" disabled={busy} className="bg-accent text-bg font-semibold rounded px-3 py-1 text-sm">
                 {busy ? 'Saving…' : 'Save'}
               </button>

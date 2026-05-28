@@ -14,6 +14,7 @@ import agentsRouter from './routes/agents.js';
 import riskRouter from './routes/risk.js';
 import settingsRouter from './routes/settings.js';
 import adminRouter from './routes/admin.js';
+import goalsRouter from './routes/goals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3200', 10);
@@ -30,6 +31,7 @@ app.use('/api/comments', commentsRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/goals', goalsRouter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -68,6 +68,12 @@ export const api = {
     get: () => req('/api/settings'),
     put: (body) => req('/api/settings', { method: 'PUT', body }),
   },
+  goals: {
+    list: () => req('/api/goals'),
+    create: (body) => req('/api/goals', { method: 'POST', body }),
+    update: (id, body) => req(`/api/goals/${id}`, { method: 'PATCH', body }),
+    delete: (id) => req(`/api/goals/${id}`, { method: 'DELETE' }),
+  },
   admin: {
     stats: () => req('/api/admin/stats'),
     clearReviews: () => req('/api/admin/clear-reviews', { method: 'POST' }),

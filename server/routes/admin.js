@@ -7,7 +7,7 @@ const router = express.Router();
 router.get('/stats', (req, res) => {
   const counts = {};
   for (const t of ['repos', 'worktrees', 'reviews', 'file_reviewed', 'comments',
-                   'agent_configs', 'agent_runs', 'agent_findings']) {
+                   'agent_configs', 'agent_runs', 'agent_findings', 'goals']) {
     counts[t] = db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
   }
   res.json(counts);
@@ -39,6 +39,7 @@ router.post('/clear-all', (req, res) => {
     db.prepare('DELETE FROM reviews').run();
     db.prepare('DELETE FROM worktrees').run();
     db.prepare('DELETE FROM repos').run();
+    db.prepare('DELETE FROM goals').run();
     db.prepare('DELETE FROM settings').run();
   });
   tx();

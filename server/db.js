@@ -64,7 +64,18 @@ const MIGRATIONS = [
     command TEXT NOT NULL,
     prompt_template TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
+    include_goals INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
+  `ALTER TABLE agent_configs ADD COLUMN include_goals INTEGER NOT NULL DEFAULT 0`,
+  `CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
   `CREATE TABLE IF NOT EXISTS agent_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

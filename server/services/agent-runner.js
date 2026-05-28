@@ -7,6 +7,18 @@ function fillTemplate(tpl, vars) {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in vars ? String(vars[k]) : ''));
 }
 
+function formatGoals() {
+  const goals = db
+    .prepare('SELECT title, body FROM goals WHERE enabled = 1 ORDER BY sort_order ASC, id ASC')
+    .all();
+  if (!goals.length) return '';
+  const lines = goals.map((g) => {
+    const body = (g.body || '').trim();
+    return body ? `- **${g.title}** — ${body}` : `- **${g.title}**`;
+  });
+  return `## Review goals\n\nThe reviewer should pay special attention to the following goals:\n${lines.join('\n')}\n`;
+}
+
 /**
  * Unwrap common agent CLI envelopes so the parser sees the actual assistant text.
  * Returns { text, envelope }. envelope is a hint string for diagnostics.
@@ -125,12 +137,25 @@ export async function runAgent({ reviewId, agentConfigId }) {
     const diff = await getUnifiedDiff(review.worktree_path, review.base_sha, review.head_sha);
     const files = await getDiffFiles(review.worktree_path, review.base_sha, review.head_sha);
     const filePaths = files.map((f) => f.path).join('\n');
-    const prompt = fillTemplate(agent.prompt_template, {
+
+    const goalsBlock = agent.include_goals ? formatGoals() : '';
+    const tpl = agent.prompt_template;
+    /* If the template already references {{goals}}, fillTemplate will substitute.
+       Otherwise, when goals are included, prepend the goals block so the user
+       doesn't need to edit existing templates. */
+    let prompt = fillTemplate(tpl, {
       diff,
       file_paths: filePaths,
       base: review.base_ref,
       head: review.head_ref,
+      goals: goalsBlock,
     });
+    if (agent.include_goals && goalsBlock && !tpl.includes('{{goals}}')) {
+      prompt = goalsBlock + '\n' + prompt;
+    }
+    if (agent.include_goals) {
+      log.agent(`run #${runId} including ${goalsBlock ? 'goals' : 'no enabled goals'}`);
+    }
 
     db.prepare(`UPDATE agent_runs SET prompt = ? WHERE id = ?`).run(prompt, runId);
 
