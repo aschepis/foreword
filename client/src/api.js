@@ -79,4 +79,37 @@ export const api = {
     clearReviews: () => req('/api/admin/clear-reviews', { method: 'POST' }),
     clearAll: () => req('/api/admin/clear-all', { method: 'POST' }),
   },
+  fix: {
+    pending: (reviewId) => req(`/api/reviews/${reviewId}/fix/pending`),
+    /* Streams ndjson events to onEvent. Resolves when the server closes. */
+    async run(reviewId, agentConfigId, onEvent) {
+      const res = await fetch(`/api/reviews/${reviewId}/fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_config_id: agentConfigId }),
+      });
+      if (!res.ok && !res.body) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || res.statusText);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          if (!line.trim()) continue;
+          try { onEvent(JSON.parse(line)); } catch (e) { console.warn('bad ndjson line', line); }
+        }
+      }
+      if (buf.trim()) {
+        try { onEvent(JSON.parse(buf)); } catch {}
+      }
+    },
+  },
 };

@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { AGENT_PRESETS, PRESET_ORDER } from '../agentPresets.js';
+
+const REVIEW_TEMPLATE =
+  'You are a code reviewer. Review the following unified diff and respond ONLY with a JSON array of findings. Each finding must have: {"file": "path/relative/to/repo", "line": <line number in NEW file or null>, "severity": "info|warn|error", "message": "..."}.\n\n{{goals}}\nDiff:\n{{diff}}';
+
+const FIX_TEMPLATE =
+  'You are a code-fix assistant working in the repository at {{worktree}}.\n\nA reviewer has requested the following change in their review of {{base}}..{{head}}.\n\nFile: {{file}}\nLine: {{line}}\n\nConversation:\n{{thread_context}}\n\nMake the requested change as described above.\n\nConstraints:\n- Do NOT make any unrelated changes.\n- Stage and commit ONLY the files you modify.\n- Use a commit message starting with "fix(local-review):" followed by a short imperative summary.\n- Create exactly ONE commit for this change.\n- If you determine no change is needed, do NOT commit; instead respond briefly explaining why.';
 
 const EMPTY_AGENT = {
   name: '',
-  command: '',
-  prompt_template:
-    'You are a code reviewer. Review the following unified diff and respond ONLY with a JSON array of findings. Each finding must have: {"file": "path/relative/to/repo", "line": <line number in NEW file or null>, "severity": "info|warn|error", "message": "..."}.\n\n{{goals}}\nDiff:\n{{diff}}',
+  command: AGENT_PRESETS.claude.buildCommand(AGENT_PRESETS.claude.defaultModel, 'review'),
+  prompt_template: REVIEW_TEMPLATE,
   enabled: 1,
   include_goals: 0,
+  kind: 'review',
+  provider: 'claude',
+  model: AGENT_PRESETS.claude.defaultModel,
 };
 
 const EMPTY_GOAL = { title: '', body: '', enabled: 1 };
@@ -155,6 +164,15 @@ export default function Settings() {
                 {a.enabled ? 'enabled' : 'disabled'}
               </button>
               <div className="font-semibold">{a.name}</div>
+              <span className={`text-[10px] px-2 py-0.5 rounded ${a.kind === 'fix' ? 'bg-accent-yellow/20 text-accent-yellow' : 'bg-accent/20 text-accent'}`}>
+                {a.kind === 'fix' ? '🔧 fix' : '🔍 review'}
+              </span>
+              {a.provider && a.provider !== 'other' && (
+                <span className="text-[10px] px-2 py-0.5 rounded bg-bg-line text-text-muted">
+                  {AGENT_PRESETS[a.provider]?.label || a.provider}
+                  {a.model ? ` · ${a.model}` : ''}
+                </span>
+              )}
               {a.include_goals ? (
                 <span className="text-[10px] px-2 py-0.5 rounded bg-accent-purple/20 text-accent-purple"
                       title={`Will receive ${enabledGoalCount} enabled goal${enabledGoalCount === 1 ? '' : 's'} in the prompt`}>
@@ -208,22 +226,127 @@ export default function Settings() {
       </div>
 
       {/* ─── Agent modal ─── */}
-      {editingAgent && (
+      {editingAgent && (() => {
+        const provider = editingAgent.provider || 'other';
+        const preset = AGENT_PRESETS[provider] || AGENT_PRESETS.other;
+        const setKind = (newKind) => {
+          const shouldReplaceTpl = editingAgent.prompt_template === REVIEW_TEMPLATE ||
+                                    editingAgent.prompt_template === FIX_TEMPLATE ||
+                                    !editingAgent.id;
+          const newCommand = provider !== 'other'
+            ? preset.buildCommand(editingAgent.model || preset.defaultModel, newKind)
+            : editingAgent.command;
+          setEditingAgent({
+            ...editingAgent,
+            kind: newKind,
+            command: newCommand,
+            prompt_template: shouldReplaceTpl
+              ? (newKind === 'fix' ? FIX_TEMPLATE : REVIEW_TEMPLATE)
+              : editingAgent.prompt_template,
+          });
+        };
+        const setProvider = (newProv) => {
+          const newPreset = AGENT_PRESETS[newProv];
+          if (newProv === 'other') {
+            setEditingAgent({ ...editingAgent, provider: 'other', model: null });
+          } else {
+            const newModel = newPreset.defaultModel;
+            setEditingAgent({
+              ...editingAgent,
+              provider: newProv,
+              model: newModel,
+              command: newPreset.buildCommand(newModel, editingAgent.kind || 'review'),
+            });
+          }
+        };
+        const setModel = (newModel) => {
+          if (provider === 'other') return;
+          setEditingAgent({
+            ...editingAgent,
+            model: newModel,
+            command: preset.buildCommand(newModel, editingAgent.kind || 'review'),
+          });
+        };
+
+        return (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
              onClick={() => setEditingAgent(null)}>
           <form onSubmit={saveAgent} onClick={(e) => e.stopPropagation()}
                 className="bg-bg-soft border border-bg-line rounded-lg p-4 w-full max-w-2xl space-y-3 max-h-[90vh] overflow-auto">
             <h2 className="font-semibold">{editingAgent.id ? 'Edit agent' : 'New agent'}</h2>
+            <div className="flex gap-2">
+              {[
+                { id: 'review', label: '🔍 Review', hint: 'Suggests findings; never modifies files.' },
+                { id: 'fix', label: '🔧 Fix', hint: 'Modifies files + commits to address fixable comments.' },
+              ].map((k) => (
+                <button
+                  key={k.id}
+                  type="button"
+                  onClick={() => setKind(k.id)}
+                  className={`flex-1 text-left border rounded p-3 ${editingAgent.kind === k.id ? 'border-accent bg-accent/10' : 'border-bg-line bg-bg hover:border-text-muted'}`}
+                >
+                  <div className="font-semibold text-sm">{k.label}</div>
+                  <div className="text-xs text-text-muted">{k.hint}</div>
+                </button>
+              ))}
+            </div>
             <label className="block">
               <div className="text-xs text-text-muted mb-1">Name</div>
               <input className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm"
                      value={editingAgent.name} onChange={(e) => setEditingAgent({...editingAgent, name: e.target.value})} />
             </label>
+
+            <div>
+              <div className="text-xs text-text-muted mb-1">Agent</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {PRESET_ORDER.map((id) => {
+                  const p = AGENT_PRESETS[id];
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setProvider(id)}
+                      className={`text-left border rounded px-2 py-2 ${provider === id ? 'border-accent bg-accent/10' : 'border-bg-line bg-bg hover:border-text-muted'}`}
+                    >
+                      <div className="font-semibold text-sm">{p.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {preset.hint && (
+                <div className="text-[11px] text-text-muted mt-1.5">{preset.hint}</div>
+              )}
+            </div>
+
+            {provider !== 'other' && preset.models?.length > 0 && (
+              <label className="block">
+                <div className="text-xs text-text-muted mb-1">Model</div>
+                <select
+                  className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm"
+                  value={editingAgent.model || preset.defaultModel}
+                  onChange={(e) => setModel(e.target.value)}
+                >
+                  {preset.models.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <label className="block">
-              <div className="text-xs text-text-muted mb-1">Shell command — receives prompt on stdin</div>
-              <input className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm font-mono"
-                     placeholder="e.g. claude -p --output-format json"
-                     value={editingAgent.command} onChange={(e) => setEditingAgent({...editingAgent, command: e.target.value})} />
+              <div className="text-xs text-text-muted mb-1">
+                Shell command — receives prompt on stdin
+                {provider !== 'other' && (
+                  <span className="text-text-dim ml-2">(auto-generated; switch to "Other" to fully customize)</span>
+                )}
+              </div>
+              <input className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm font-mono disabled:opacity-70"
+                     placeholder={editingAgent.kind === 'fix'
+                       ? 'e.g. claude -p --permission-mode acceptEdits --output-format json'
+                       : 'e.g. claude -p --output-format json'}
+                     value={editingAgent.command}
+                     disabled={provider !== 'other'}
+                     onChange={(e) => setEditingAgent({...editingAgent, command: e.target.value})} />
             </label>
             <label className="block">
               <div className="text-xs text-text-muted mb-1">Prompt template</div>
@@ -254,7 +377,8 @@ export default function Settings() {
             </div>
           </form>
         </div>
-      )}
+        );
+      })()}
 
       {/* ─── Goal modal ─── */}
       {editingGoal && (

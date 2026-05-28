@@ -11,7 +11,9 @@ export default function AgentPanel({ reviewId, runs, findings, onRefresh }) {
   const [lastError, setLastError] = useState(null);
 
   useEffect(() => {
-    api.agents.list().then((a) => {
+    api.agents.list().then((all) => {
+      /* Review panel only shows review-kind agents; fix agents live in FixPanel. */
+      const a = all.filter((x) => x.kind !== 'fix');
       setAgents(a);
       setSelected(new Set(a.filter((x) => x.enabled).map((x) => x.id)));
     });
@@ -48,7 +50,8 @@ export default function AgentPanel({ reviewId, runs, findings, onRefresh }) {
         }
       }
       /* Re-fetch agents list too — `selected` may contain stale config IDs */
-      api.agents.list().then((a) => {
+      api.agents.list().then((all) => {
+        const a = all.filter((x) => x.kind !== 'fix');
         setAgents(a);
         setSelected((cur) => new Set([...cur].filter((id) => a.some((x) => x.id === id))));
       });

@@ -10,20 +10,24 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { name, command, prompt_template, enabled = 1, include_goals = 0 } = req.body || {};
+  const {
+    name, command, prompt_template, enabled = 1, include_goals = 0, kind = 'review',
+    provider = null, model = null,
+  } = req.body || {};
   if (!name || !command || !prompt_template) {
     return res.status(400).json({ error: 'name, command, prompt_template required' });
   }
+  if (!['review', 'fix'].includes(kind)) return res.status(400).json({ error: 'kind must be review or fix' });
   const info = db
-    .prepare('INSERT INTO agent_configs (name, command, prompt_template, enabled, include_goals) VALUES (?, ?, ?, ?, ?)')
-    .run(name, command, prompt_template, enabled ? 1 : 0, include_goals ? 1 : 0);
+    .prepare('INSERT INTO agent_configs (name, command, prompt_template, enabled, include_goals, kind, provider, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(name, command, prompt_template, enabled ? 1 : 0, include_goals ? 1 : 0, kind, provider, model);
   res.json(db.prepare('SELECT * FROM agent_configs WHERE id = ?').get(info.lastInsertRowid));
 });
 
 router.patch('/:id', (req, res) => {
   const fields = [];
   const args = [];
-  for (const k of ['name', 'command', 'prompt_template', 'enabled', 'include_goals']) {
+  for (const k of ['name', 'command', 'prompt_template', 'enabled', 'include_goals', 'kind', 'provider', 'model']) {
     if (k in (req.body || {})) {
       fields.push(`${k} = ?`);
       args.push(['enabled', 'include_goals'].includes(k) ? (req.body[k] ? 1 : 0) : req.body[k]);
@@ -64,7 +68,7 @@ router.get('/runs', (req, res) => {
   /* exclude heavy prompt/stdout fields from the list view */
   const runs = db
     .prepare(`SELECT id, review_id, agent_config_id, agent_name, status, started_at,
-              finished_at, command, exit_code, duration_ms, finding_count
+              finished_at, command, exit_code, duration_ms, finding_count, kind, target_comment_id
               FROM agent_runs WHERE review_id = ? ORDER BY started_at DESC`)
     .all(reviewId);
   const findings = db

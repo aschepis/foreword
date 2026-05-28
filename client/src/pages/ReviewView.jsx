@@ -6,6 +6,7 @@ import FileSidebar from '../components/FileSidebar.jsx';
 import RiskRadar from '../components/RiskRadar.jsx';
 import TimeTravel from '../components/TimeTravel.jsx';
 import AgentPanel from '../components/AgentPanel.jsx';
+import FixPanel from '../components/FixPanel.jsx';
 import CommentDialog from '../components/CommentDialog.jsx';
 
 export default function ReviewView() {
@@ -107,32 +108,74 @@ export default function ReviewView() {
     loadReviewed();
   }
 
-  async function submitComment(body) {
+  async function submitComment({ body, agent_fixable }) {
     const a = anchor;
     setAnchor(null);
     await api.comments.create({
       review_id: reviewId,
-      path: a.file || null,
-      line: a.line || null,
-      side: a.side || null,
+      parent_id: a.parentComment?.id || null,
+      path: a.file || a.parentComment?.path || null,
+      line: a.line || a.parentComment?.line || null,
+      side: a.side || a.parentComment?.side || null,
       body,
+      agent_fixable: agent_fixable ? 1 : 0,
     });
     loadComments();
   }
 
-  async function submitGlobal(body) {
+  async function submitGlobal({ body, agent_fixable }) {
     setGlobalCommentOpen(false);
-    await api.comments.create({ review_id: reviewId, body });
+    await api.comments.create({
+      review_id: reviewId, body,
+      agent_fixable: agent_fixable ? 1 : 0,
+    });
     loadComments();
+  }
+
+  async function reloadAfterFix() {
+    /* Fix runs update the review's head_sha, so refetch everything that depends on it. */
+    await loadReview();
+    await loadDiff();
+    await loadComments();
+    await loadRisk();
+    await loadCommits();
+    await loadAgents();
   }
 
   // keyboard nav
   useEffect(() => {
+    function focusFinding(delta) {
+      /* All pinned findings = inline comment widgets in DOM order. Loops at ends. */
+      const widgets = Array.from(document.querySelectorAll('.lr-thread'));
+      if (widgets.length === 0) return;
+      const currentIdx = widgets.findIndex((w) => w.classList.contains('lr-comment-focused'));
+      let nextIdx;
+      if (currentIdx === -1) {
+        /* Pick the widget closest to viewport center on first activation */
+        const center = window.innerHeight / 2;
+        let best = 0, bestDist = Infinity;
+        widgets.forEach((w, i) => {
+          const rect = w.getBoundingClientRect();
+          const dist = Math.abs((rect.top + rect.bottom) / 2 - center);
+          if (dist < bestDist) { bestDist = dist; best = i; }
+        });
+        nextIdx = best;
+      } else {
+        nextIdx = (currentIdx + delta + widgets.length) % widgets.length;
+      }
+      widgets.forEach((w) => w.classList.remove('lr-comment-focused'));
+      const target = widgets[nextIdx];
+      target.classList.add('lr-comment-focused');
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     function onKey(e) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === ',') setScrubIndex((i) => Math.max(-1, i - 1));
       if (e.key === '.') setScrubIndex((i) => Math.min(commits.length - 1, i + 1));
-      if (e.key === '?') alert('Shortcuts:\n,  prev commit\n.  next commit\nw  toggle whitespace\nf  toggle inline/side-by-side\ng  global comment\ndouble-click line: add comment');
+      if (e.key === 'j') { e.preventDefault(); focusFinding(+1); }
+      if (e.key === 'k') { e.preventDefault(); focusFinding(-1); }
+      if (e.key === '?') alert('Shortcuts:\n,  prev commit\n.  next commit\nj  next pinned finding (loops)\nk  prev pinned finding (loops)\nw  toggle whitespace\nf  toggle inline/side-by-side\ng  global comment\ndouble-click line: add comment');
       if (e.key === 'w') setIgnoreWs((v) => !v);
       if (e.key === 'f') setOutputFormat((m) => m === 'side-by-side' ? 'line-by-line' : 'side-by-side');
       if (e.key === 'g') setGlobalCommentOpen(true);
@@ -210,6 +253,12 @@ export default function ReviewView() {
             findings={agentRuns.findings}
             onRefresh={() => { loadAgents(); loadComments(); loadRisk(); }}
           />
+          <FixPanel
+            reviewId={reviewId}
+            comments={comments}
+            onAfterRun={() => { loadComments(); loadAgents(); }}
+            onReloadDiff={reloadAfterFix}
+          />
 
           {globalComments.length > 0 && (
             <div className="bg-bg-soft border border-bg-line rounded p-3 mb-3">
@@ -232,7 +281,10 @@ export default function ReviewView() {
             commentsByLine={commentsByLine}
             outputFormat={outputFormat}
             onAddComment={setAnchor}
+            onReplyToComment={setAnchor}
             fileStatus={fileStatus}
+            fileShas={diffData?.file_shas}
+            onToggleReviewed={onToggleReviewed}
           />
         </div>
       </div>

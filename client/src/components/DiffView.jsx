@@ -45,7 +45,10 @@ export default function DiffView({
   commentsByLine,
   outputFormat = 'side-by-side',
   onAddComment,
+  onReplyToComment,
   fileStatus,
+  fileShas,
+  onToggleReviewed,
 }) {
   const files = useMemo(() => {
     if (!diff) return [];
@@ -77,17 +80,22 @@ export default function DiffView({
           viewType={outputFormat === 'side-by-side' ? 'split' : 'unified'}
           comments={commentsByLine?.get(file.newPath || file.oldPath)}
           onAddComment={onAddComment}
+          onReplyToComment={onReplyToComment}
           status={fileStatus?.get(file.newPath || file.oldPath)}
+          contentSha={fileShas?.[file.newPath || file.oldPath]}
+          onToggleReviewed={onToggleReviewed}
         />
       ))}
     </div>
   );
 }
 
-function FileCard({ file, viewType, comments, onAddComment, status }) {
+function FileCard({ file, viewType, comments, onAddComment, onReplyToComment, status, contentSha, onToggleReviewed }) {
   const path = file.newPath || file.oldPath;
   const oldPath = file.oldPath;
-  const [collapsed, setCollapsed] = useState(false);
+  const isReviewed = status === 'reviewed';
+  const isStale = status === 'stale';
+  const [collapsed, setCollapsed] = useState(isReviewed); /* collapse reviewed files by default */
 
   const language = langFor(path);
 
@@ -119,7 +127,9 @@ function FileCard({ file, viewType, comments, onAddComment, status }) {
         if (!lineKey) continue;
         const threads = comments.get(lineKey);
         if (!threads || !threads.length) continue;
-        w[getChangeKey(change)] = <CommentWidget threads={threads} />;
+        w[getChangeKey(change)] = (
+          <CommentWidget threads={threads} onReplyToComment={onReplyToComment} file={path} line={lineKey} />
+        );
       }
     }
     return w;
@@ -156,11 +166,29 @@ function FileCard({ file, viewType, comments, onAddComment, status }) {
             ← {oldPath}
           </span>
         )}
-        {status && <ReviewStatusBadge status={status} />}
+        {isStale && <ReviewStatusBadge status="stale" />}
         <span className="lr-file-stats">
           <span className="lr-stat-add">+{additions}</span>
           <span className="lr-stat-del">−{deletions}</span>
         </span>
+        {onToggleReviewed && (
+          <label
+            className={`lr-viewed-toggle ${isReviewed ? 'lr-viewed-toggle-on' : ''}`}
+            title={isStale ? 'File changed since you last reviewed — re-tick to update' : (isReviewed ? 'Reviewed' : 'Mark this file as reviewed')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={isReviewed}
+              onChange={(e) => {
+                onToggleReviewed(path, contentSha, isReviewed);
+                if (e.target.checked) setCollapsed(true);
+                else setCollapsed(false);
+              }}
+            />
+            <span>Viewed</span>
+          </label>
+        )}
       </div>
       {!collapsed && (
         file.hunks.length === 0 ? (
@@ -213,26 +241,53 @@ function ReviewStatusBadge({ status }) {
   return null;
 }
 
-function CommentWidget({ threads }) {
+function CommentWidget({ threads, onReplyToComment, file, line }) {
   return (
     <div className="lr-thread-container">
-      {threads.map((thread, i) => (
-        <div key={thread[0]?.id || i} className="lr-thread">
-          {thread.map((c) => <CommentItem key={c.id} c={c} />)}
-        </div>
-      ))}
+      {threads.map((thread, i) => {
+        const root = thread[0];
+        return (
+          <div key={root?.id || i} className="lr-thread">
+            {thread.map((c) => <CommentItem key={c.id} c={c} />)}
+            {onReplyToComment && root && (
+              <button
+                type="button"
+                className="lr-reply-btn"
+                onClick={() => onReplyToComment({ parentComment: thread[thread.length - 1] || root, file, line })}
+              >↩ Reply</button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function CommentItem({ c }) {
   const isAgent = c.source && c.source.startsWith('agent:');
+  const fixStatus = c.fix_status;
   return (
-    <div className={`lr-comment ${isAgent ? 'lr-comment-agent' : ''}`}>
+    <div className={`lr-comment ${isAgent ? 'lr-comment-agent' : ''} ${c.agent_fixable && !fixStatus ? 'lr-comment-fixable' : ''} ${fixStatus === 'fixed' ? 'lr-comment-fixed' : ''}`}>
       <div className="lr-comment-meta">
         {isAgent && <span className="lr-meta-badge lr-meta-badge-agent">{c.source.replace('agent:', '')}</span>}
         <b>{c.author}</b>
         <span className="lr-comment-date">· {c.created_at}</span>
+        {c.agent_fixable && !fixStatus && (
+          <span className="lr-meta-badge lr-meta-badge-fixable" title="The fix agent will address this">
+            🔧 fixable
+          </span>
+        )}
+        {fixStatus === 'fixed' && (
+          <span className="lr-meta-badge lr-meta-badge-fixed" title={c.fix_commit_sha ? `commit ${c.fix_commit_sha.slice(0, 7)}` : 'fixed'}>
+            ✓ fixed{c.fix_commit_sha ? ` (${c.fix_commit_sha.slice(0, 7)})` : ''}
+          </span>
+        )}
+        {fixStatus === 'skipped' && (
+          <span className="lr-meta-badge lr-meta-badge-stale" title="Agent ran but made no commit">· skipped</span>
+        )}
+        {fixStatus === 'failed' && (
+          <span className="lr-meta-badge lr-meta-badge-failed" title="Agent failed — see run inspector">✗ failed</span>
+        )}
         {c.resolved ? <span className="lr-comment-resolved">· resolved</span> : null}
       </div>
       <div className="lr-comment-body">{c.body}</div>

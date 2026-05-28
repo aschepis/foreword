@@ -68,6 +68,14 @@ const MIGRATIONS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
   `ALTER TABLE agent_configs ADD COLUMN include_goals INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE agent_configs ADD COLUMN kind TEXT NOT NULL DEFAULT 'review'`,
+  `ALTER TABLE agent_configs ADD COLUMN provider TEXT`,
+  `ALTER TABLE agent_configs ADD COLUMN model TEXT`,
+  `ALTER TABLE comments ADD COLUMN agent_fixable INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE comments ADD COLUMN fix_status TEXT`,
+  `ALTER TABLE comments ADD COLUMN fix_commit_sha TEXT`,
+  `ALTER TABLE comments ADD COLUMN fix_run_id INTEGER`,
+  `ALTER TABLE comments ADD COLUMN fixed_at TEXT`,
   `CREATE TABLE IF NOT EXISTS goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -98,6 +106,8 @@ const MIGRATIONS = [
   `ALTER TABLE agent_runs ADD COLUMN prompt TEXT`,
   `ALTER TABLE agent_runs ADD COLUMN exit_code INTEGER`,
   `ALTER TABLE agent_runs ADD COLUMN duration_ms INTEGER`,
+  `ALTER TABLE agent_runs ADD COLUMN kind TEXT NOT NULL DEFAULT 'review'`,
+  `ALTER TABLE agent_runs ADD COLUMN target_comment_id INTEGER`,
   `CREATE TABLE IF NOT EXISTS agent_findings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_run_id INTEGER NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
