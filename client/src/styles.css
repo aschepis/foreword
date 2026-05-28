@@ -1,0 +1,267 @@
+@import 'react-diff-view/style/index.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --bg-soft: #161b22;
+  --bg-softer: #1c2128;
+  --bg-line: #30363d;
+  --bg-hover: #21262d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --text-dim: #6e7681;
+  --accent: #58a6ff;
+  --accent-green: #3fb950;
+  --accent-red: #f85149;
+  --accent-yellow: #d29922;
+  --accent-purple: #bc8cff;
+
+  /* react-diff-view custom properties — GitHub Dark */
+  --diff-background-color: var(--bg);
+  --diff-text-color: var(--text);
+  --diff-font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --diff-selection-background-color: rgba(56, 139, 253, 0.4);
+  --diff-selection-text-color: var(--text);
+  --diff-gutter-insert-background-color: rgba(46, 160, 67, 0.3);
+  --diff-gutter-insert-text-color: var(--accent-green);
+  --diff-gutter-delete-background-color: rgba(248, 81, 73, 0.3);
+  --diff-gutter-delete-text-color: var(--accent-red);
+  --diff-gutter-selected-background-color: rgba(187, 128, 9, 0.2);
+  --diff-gutter-selected-text-color: var(--accent-yellow);
+  --diff-code-insert-background-color: rgba(46, 160, 67, 0.15);
+  --diff-code-insert-text-color: var(--text);
+  --diff-code-delete-background-color: rgba(248, 81, 73, 0.15);
+  --diff-code-delete-text-color: var(--text);
+  --diff-code-insert-edit-background-color: rgba(46, 160, 67, 0.45);
+  --diff-code-insert-edit-text-color: #aff5b4;
+  --diff-code-delete-edit-background-color: rgba(248, 81, 73, 0.45);
+  --diff-code-delete-edit-text-color: #ffabaa;
+  --diff-code-selected-background-color: rgba(187, 128, 9, 0.15);
+  --diff-code-selected-text-color: var(--text);
+  --diff-omit-gutter-line-color: var(--accent-red);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button { cursor: pointer; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #484f58; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ─── Empty diff state ─────────────────────────────────────────────── */
+.empty-diff {
+  padding: 32px;
+  color: var(--text-muted);
+  text-align: center;
+  background: var(--bg-soft);
+  border: 1px solid var(--bg-line);
+  border-radius: 8px;
+}
+
+/* ─── File card ────────────────────────────────────────────────────── */
+.diff-host { display: flex; flex-direction: column; gap: 16px; }
+
+.lr-file-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--bg-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lr-file-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-softer);
+  border-bottom: 1px solid var(--bg-line);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.lr-collapse-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 0 4px;
+  line-height: 1;
+}
+.lr-collapse-btn:hover { color: var(--text); }
+
+.lr-file-name {
+  color: var(--accent);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lr-rename-from {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lr-file-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.lr-stat-add { color: var(--accent-green); }
+.lr-stat-del { color: var(--accent-red); }
+
+.lr-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-line);
+  color: var(--text-muted);
+}
+.lr-badge-add { background: rgba(46, 160, 67, 0.18); color: var(--accent-green); }
+.lr-badge-del { background: rgba(248, 81, 73, 0.18); color: var(--accent-red); }
+.lr-badge-rename { background: rgba(188, 140, 255, 0.18); color: var(--accent-purple); }
+.lr-badge-reviewed { background: rgba(46, 160, 67, 0.15); color: var(--accent-green); }
+.lr-badge-stale { background: rgba(210, 153, 34, 0.18); color: var(--accent-yellow); }
+
+.lr-empty-hunk {
+  padding: 18px;
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  background: var(--bg);
+}
+
+/* ─── Diff table ──────────────────────────────────────────────────── */
+.lr-diff {
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.lr-diff .diff-line { line-height: 1.55; }
+
+.lr-diff .diff-gutter {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  background: var(--bg-soft);
+  color: var(--text-dim);
+  border-right: 1px solid var(--bg-line);
+  padding: 0 8px;
+  min-width: 44px;
+  transition: background 80ms;
+}
+.lr-diff .diff-gutter:hover { background: var(--bg-hover); color: var(--accent); }
+
+.lr-diff .diff-gutter-col { width: 50px; }
+
+.lr-diff .diff-code {
+  padding: 0 12px;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+/* hunk decoration row */
+.lr-diff .diff-decoration {
+  background: var(--bg-softer);
+  border-top: 1px solid var(--bg-line);
+  border-bottom: 1px solid var(--bg-line);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.lr-diff .diff-decoration-content { padding: 4px 12px; }
+.lr-hunk-pos {
+  color: var(--accent-purple);
+  margin-right: 12px;
+  font-weight: 500;
+}
+.lr-hunk-ctx { color: var(--text-muted); }
+
+/* Word-level edit emphasis */
+.lr-diff .diff-code-edit { border-radius: 2px; padding: 1px 0; }
+
+/* ─── Inline comment widget ───────────────────────────────────────── */
+.lr-diff .diff-widget-content {
+  background: var(--bg-soft);
+  border-top: 1px solid var(--bg-line);
+  border-bottom: 1px solid var(--bg-line);
+}
+.lr-thread-container {
+  padding: 10px 12px 10px 54px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lr-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lr-comment {
+  background: var(--bg);
+  border: 1px solid var(--bg-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+.lr-comment-agent { border-left-color: var(--accent-purple); }
+.lr-comment-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.lr-comment-meta b { color: var(--text); font-weight: 600; }
+.lr-comment-date, .lr-comment-resolved { color: var(--text-dim); }
+.lr-comment-body {
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.lr-meta-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lr-meta-badge-agent {
+  background: rgba(188, 140, 255, 0.18);
+  color: var(--accent-purple);
+}
+
+/* ─── Risk badges (used elsewhere) ────────────────────────────────── */
+.risk-high { background: rgba(248, 81, 73, 0.18); color: var(--accent-red); }
+.risk-medium { background: rgba(210, 153, 34, 0.18); color: var(--accent-yellow); }
+.risk-low { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); }
