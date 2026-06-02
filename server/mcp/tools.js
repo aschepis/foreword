@@ -97,7 +97,11 @@ export async function createReview({ repo_path, base_ref, head_ref, worktree_pat
     )
     .run(repo.id, wtPath, baseRef, head_ref, baseSha, headSha, sessionId);
 
-  const reviewId = info.lastInsertRowid;
+  /* Coerce: lastInsertRowid is a BigInt when better-sqlite3's safeIntegers
+     mode is enabled elsewhere, which JSON.stringify would throw on. Plain
+     numbers in JS handle ids up to 2^53; row counts get there in trillions,
+     so the coercion is safe. */
+  const reviewId = Number(info.lastInsertRowid);
   const url = `${publicBaseUrl()}/reviews/${reviewId}`;
   if (launch) openBrowser(url);
   log.info(`MCP created review #${reviewId} ${baseRef}…${head_ref} session=${sessionId} launched=${launch}`);
