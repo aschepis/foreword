@@ -66,8 +66,13 @@ export default function AgentRunInspector({ runId, onClose, onMissing, fallback,
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="bg-bg-soft border border-bg-line rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col"
            onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-bg-line">
-          <h2 className="font-semibold">Agent run #{runId}</h2>
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-bg-line">
+          <div>
+            <div className="lr-eyebrow">Run · #{runId}</div>
+            <h2 className="lr-serif text-[18px] font-semibold leading-tight">
+              {detail?.run?.agent_name || 'Loading…'}
+            </h2>
+          </div>
           {detail?.run && (
             <>
               <span className={`text-xs px-2 py-0.5 rounded ${
@@ -75,7 +80,6 @@ export default function AgentRunInspector({ runId, onClose, onMissing, fallback,
                 detail.run.status === 'failed' ? 'bg-accent-red/20 text-accent-red' :
                 'bg-accent-yellow/20 text-accent-yellow'
               }`}>{detail.run.status}</span>
-              <span className="text-xs text-text-muted">{detail.run.agent_name}</span>
               <span className="text-xs text-text-dim">exit {detail.run.exit_code ?? '—'}</span>
               {detail.run.duration_ms != null && (
                 <span className="text-xs text-text-dim">{(detail.run.duration_ms / 1000).toFixed(2)}s</span>

@@ -87,6 +87,75 @@ export async function mergeBase(repoPath, a, b) {
   }
 }
 
+/**
+ * Detect whether the worktree's HEAD has drifted from a stored sha.
+ *
+ *   none      stored === current
+ *   ahead     stored is reachable from current (linear advance) — new_commits > 0
+ *   diverged  stored is NOT reachable from current (rebase, amend, reset, or
+ *             stored is a dangling/missing object)
+ *
+ * Approach: count commits in both directions with `rev-list --count`. If the
+ * "behind" count > 0, the stored sha has commits the current HEAD doesn't —
+ * i.e. the branch was rewritten. `merge-base --is-ancestor` would be cleaner
+ * but simple-git swallows its exit-1 signal.
+ */
+export async function detectHeadDrift(repoPath, storedHeadSha, headRef) {
+  const git = gitAt(repoPath);
+  let currentHeadSha;
+  try {
+    currentHeadSha = (await git.revparse(['HEAD'])).trim();
+  } catch {
+    return { drift: 'unknown', stored_head_sha: storedHeadSha, current_head_sha: null, new_commits: 0 };
+  }
+
+  if (currentHeadSha === storedHeadSha) {
+    return { drift: 'none', stored_head_sha: storedHeadSha, current_head_sha: currentHeadSha, new_commits: 0 };
+  }
+
+  /* If stored isn't a known object at all (gc'd / never existed), treat as diverged. */
+  try {
+    await git.raw(['cat-file', '-e', storedHeadSha]);
+  } catch {
+    return {
+      drift: 'diverged',
+      stored_head_sha: storedHeadSha,
+      current_head_sha: currentHeadSha,
+      new_commits: 0,
+      head_ref: headRef,
+    };
+  }
+
+  async function count(range) {
+    try {
+      const out = await git.raw(['rev-list', '--count', range]);
+      return parseInt(out.trim(), 10) || 0;
+    } catch { return 0; }
+  }
+  const ahead  = await count(`${storedHeadSha}..${currentHeadSha}`);
+  const behind = await count(`${currentHeadSha}..${storedHeadSha}`);
+
+  /* Behind > 0 means stored has commits unreachable from current ⇒ rewritten. */
+  if (behind > 0) {
+    return {
+      drift: 'diverged',
+      stored_head_sha: storedHeadSha,
+      current_head_sha: currentHeadSha,
+      new_commits: ahead,
+      behind_commits: behind,
+      head_ref: headRef,
+    };
+  }
+
+  return {
+    drift: 'ahead',
+    stored_head_sha: storedHeadSha,
+    current_head_sha: currentHeadSha,
+    new_commits: ahead,
+    head_ref: headRef,
+  };
+}
+
 export async function getUnifiedDiff(repoPath, baseRef, headRef, { ignoreWhitespace = false } = {}) {
   const git = gitAt(repoPath);
   const args = ['diff', '--no-color', '--no-ext-diff', '--unified=3'];

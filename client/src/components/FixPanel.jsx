@@ -76,21 +76,26 @@ export default function FixPanel({ reviewId, comments, onAfterRun, onReloadDiff 
   if (fixAgents.length === 0) {
     if (fixableComments.length === 0) return null;
     return (
-      <div className="bg-bg-soft border border-bg-line rounded p-3 mb-3 text-xs text-text-muted">
-        <b className="text-text">{fixableComments.length}</b> comment{fixableComments.length === 1 ? '' : 's'} flagged for the fix agent, but no fix agent is configured.{' '}
+      <div className="lr-paper p-4 mb-4 text-xs text-text-muted">
+        <div className="lr-eyebrow mb-1">Galley revisions</div>
+        <b className="text-text">{fixableComments.length}</b> comment{fixableComments.length === 1 ? '' : 's'} flagged for a fix agent, but none is configured.{' '}
         <a href="/settings" className="text-accent hover:underline">Configure one in Settings →</a>
       </div>
     );
   }
 
   return (
-    <div className="bg-bg-soft border border-bg-line rounded p-3 mb-3">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold">🔧 Fix mode</h3>
+    <div className="lr-paper p-4 mb-4">
+      <div className="flex items-baseline justify-between mb-1">
+        <div>
+          <div className="lr-eyebrow">Revisions</div>
+          <h3 className="lr-serif text-[18px] font-semibold leading-tight">Galley revisions</h3>
+        </div>
         <span className="text-xs text-text-muted">
-          <b className="text-accent-yellow">{fixableComments.length}</b> pending fix{fixableComments.length === 1 ? '' : 'es'}
+          <b className="text-accent-yellow">{fixableComments.length}</b> pending
         </span>
       </div>
+      <p className="lr-serif italic text-[13px] text-text-muted mb-3">Fix agents apply flagged corrections — one commit per comment.</p>
       <div className="flex flex-wrap items-center gap-2">
         <select
           className="bg-bg border border-bg-line rounded px-2 py-1 text-xs"

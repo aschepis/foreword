@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../db.js';
-import { resolveSha, mergeBase, detectDefaultBranch } from '../git.js';
+import { resolveSha, mergeBase, detectDefaultBranch, detectHeadDrift } from '../git.js';
+import { log } from '../log.js';
 
 const router = express.Router();
 
@@ -76,6 +77,41 @@ router.delete('/:id/files/:path(*)/reviewed', (req, res) => {
 router.get('/:id/reviewed', (req, res) => {
   const rows = db.prepare('SELECT * FROM file_reviewed WHERE review_id = ?').all(req.params.id);
   res.json(rows);
+});
+
+/**
+ * Inspect whether the worktree's HEAD has moved since the review was created.
+ * Returns drift info without modifying anything. Frontend polls this.
+ */
+router.get('/:id/head-state', async (req, res, next) => {
+  try {
+    const review = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
+    if (!review) return res.status(404).json({ error: 'review not found' });
+    const state = await detectHeadDrift(review.worktree_path, review.head_sha, review.head_ref);
+    res.json(state);
+  } catch (e) { next(e); }
+});
+
+/**
+ * Advance the review's stored head_sha to the worktree's current HEAD.
+ * No-op if already in sync. Returns the new state. base_sha stays frozen
+ * so the review continues diffing against the same starting point.
+ */
+router.post('/:id/refresh-head', async (req, res, next) => {
+  try {
+    const review = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
+    if (!review) return res.status(404).json({ error: 'review not found' });
+    const state = await detectHeadDrift(review.worktree_path, review.head_sha, review.head_ref);
+    if (state.drift === 'unknown' || !state.current_head_sha) {
+      return res.status(400).json({ error: 'could not resolve HEAD in worktree', state });
+    }
+    if (state.drift === 'none') {
+      return res.json({ updated: false, state });
+    }
+    db.prepare('UPDATE reviews SET head_sha = ? WHERE id = ?').run(state.current_head_sha, review.id);
+    log.info(`review #${review.id} head_sha refreshed ${state.stored_head_sha.slice(0,7)} -> ${state.current_head_sha.slice(0,7)} (${state.drift})`);
+    res.json({ updated: true, previous_head_sha: state.stored_head_sha, state: { ...state, drift: 'none', stored_head_sha: state.current_head_sha } });
+  } catch (e) { next(e); }
 });
 
 export default router;

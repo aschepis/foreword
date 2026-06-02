@@ -66,16 +66,22 @@ export default function AgentPanel({ reviewId, runs, findings, onRefresh }) {
   }
 
   return (
-    <div className="bg-bg-soft border border-bg-line rounded p-3 mb-3">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold">AI Reviewers</h3>
-        <label className="text-xs text-text-muted flex items-center gap-1">
+    <div className="lr-paper p-4 mb-4">
+      <div className="flex items-baseline justify-between mb-1">
+        <div>
+          <div className="lr-eyebrow">Reviewers</div>
+          <h3 className="lr-serif text-[18px] font-semibold leading-tight">Editorial Board</h3>
+        </div>
+        <label className="text-xs text-text-muted flex items-center gap-1.5 cursor-pointer">
           <input type="checkbox" checked={consensusOnly} onChange={(e) => setConsensusOnly(e.target.checked)} />
           consensus only (≥2 agents)
         </label>
       </div>
+      <p className="lr-serif italic text-[13px] text-text-muted mb-3">AI reviewers read the diff in parallel; findings pin to the line.</p>
       {agents.length === 0 && (
-        <div className="text-xs text-text-muted mb-2">No agents configured. <a href="/settings" className="text-accent">Configure one</a>.</div>
+        <div className="lr-serif italic text-[14px] text-text-muted mb-3 lr-dropcap">
+          No reviewers on the board. <a href="/settings" className="text-accent not-italic">Appoint one in Settings →</a>
+        </div>
       )}
       <div className="flex flex-wrap gap-2 mb-2">
         {agents.map((a) => (
@@ -101,7 +107,7 @@ export default function AgentPanel({ reviewId, runs, findings, onRefresh }) {
       )}
       {runs && runs.length > 0 && (
         <details className="text-xs text-text-muted mb-2" open>
-          <summary className="cursor-pointer">Run history ({runs.length})</summary>
+          <summary className="cursor-pointer lr-eyebrow">Press history · {runs.length}</summary>
           <ul className="mt-1 space-y-1 max-h-40 overflow-auto">
             {runs.map((r) => (
               <li key={r.id} className="font-mono flex items-center gap-2">
@@ -159,8 +165,8 @@ export default function AgentPanel({ reviewId, runs, findings, onRefresh }) {
 
       {unmapped.length > 0 && (
         <details open className="text-xs">
-          <summary className="cursor-pointer text-text-muted">
-            Global findings (not pinned to a diff line) — {unmapped.length}
+          <summary className="cursor-pointer lr-eyebrow">
+            Marginalia · {unmapped.length} unpinned
           </summary>
           <ul className="mt-2 space-y-2">
             {unmapped.map((f) => (

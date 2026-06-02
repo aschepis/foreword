@@ -8,6 +8,8 @@ import TimeTravel from '../components/TimeTravel.jsx';
 import AgentPanel from '../components/AgentPanel.jsx';
 import FixPanel from '../components/FixPanel.jsx';
 import CommentDialog from '../components/CommentDialog.jsx';
+import DriftBanner from '../components/DriftBanner.jsx';
+import { useDriftPoll } from '../lib/useDriftPoll.js';
 
 export default function ReviewView() {
   const { reviewId } = useParams();
@@ -142,6 +144,19 @@ export default function ReviewView() {
     await loadAgents();
   }
 
+  /* ── Worktree drift detection ──────────────────────────────────────── */
+  const { state: driftState, refresh: refetchDrift } = useDriftPoll(reviewId);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function refreshHead() {
+    setRefreshing(true);
+    try {
+      await api.reviews.refreshHead(reviewId);
+      await reloadAfterFix();
+      await refetchDrift();
+    } finally { setRefreshing(false); }
+  }
+
   // keyboard nav
   useEffect(() => {
     function focusFinding(delta) {
@@ -205,35 +220,52 @@ export default function ReviewView() {
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <div className="p-3 border-b border-bg-line bg-bg-soft sticky top-0 z-10">
-          <div className="flex items-center gap-3 text-sm">
-            <Link to={`/repos/${review.repo_id}`} className="text-text-muted hover:text-accent">← repo</Link>
-            <div className="font-mono">
-              <span className="text-accent">{review.head_ref}</span>
-              <span className="text-text-muted"> ← </span>
-              <span className="text-accent-purple">{review.base_ref}</span>
-            </div>
-            <div className="text-xs text-text-dim">
-              {review.base_sha?.slice(0,7)}…{review.head_sha?.slice(0,7)}
+        <div className="bg-bg-soft sticky top-0 z-10 border-b border-bg-line">
+          {/* Top row: identity + controls */}
+          <div className="px-4 py-2.5 flex items-center gap-4 text-sm">
+            <Link to={`/repos/${review.repo_id}`} className="lr-eyebrow text-text-muted hover:text-text whitespace-nowrap">← Repo</Link>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <div className="lr-eyebrow text-text-dim">Review</div>
+              <div className="font-mono text-[13px] truncate">
+                <span className="text-accent font-semibold">{review.head_ref}</span>
+                <span className="text-text-muted mx-1.5">←</span>
+                <span className="text-accent-purple">{review.base_ref}</span>
+                <span className="text-text-dim text-[11px] ml-2">{review.base_sha?.slice(0,7)}…{review.head_sha?.slice(0,7)}</span>
+              </div>
             </div>
             <div className="ml-auto flex items-center gap-3 text-xs">
-              <span className="text-text-muted">
-                {reviewedCount}/{diffData?.files?.length || 0} reviewed
+              <span className="lr-eyebrow text-text-muted whitespace-nowrap">
+                {reviewedCount} / {diffData?.files?.length || 0} read
               </span>
-              <label className="flex items-center gap-1 text-text-muted">
+              <label className="flex items-center gap-1.5 text-text-muted whitespace-nowrap cursor-pointer">
                 <input type="checkbox" checked={ignoreWs} onChange={(e) => setIgnoreWs(e.target.checked)} />
-                ignore whitespace
+                <span>ignore whitespace</span>
               </label>
               <select
                 value={outputFormat}
                 onChange={(e) => setOutputFormat(e.target.value)}
-                className="bg-bg border border-bg-line rounded px-1 py-0.5"
+                className="text-xs"
               >
                 <option value="side-by-side">side-by-side</option>
                 <option value="line-by-line">unified</option>
               </select>
-              <button onClick={() => setGlobalCommentOpen(true)} className="text-accent hover:underline">+ global comment</button>
+              <button onClick={() => setGlobalCommentOpen(true)} className="text-accent hover:underline whitespace-nowrap">+ note</button>
+              <button
+                onClick={refreshHead}
+                disabled={refreshing}
+                title="Refresh the diff against the worktree's current HEAD"
+                className="text-text-muted hover:text-accent whitespace-nowrap disabled:opacity-50"
+              >{refreshing ? '↻ …' : '↻ refresh'}</button>
             </div>
+          </div>
+          {/* Drift banner — surfaces when worktree HEAD has moved */}
+          <DriftBanner state={driftState} busy={refreshing} onRefresh={refreshHead} />
+          {/* Reading-progress hairline */}
+          <div className="lr-progress" aria-label={`${reviewedCount} of ${diffData?.files?.length || 0} files reviewed`}>
+            <div
+              className="lr-progress-fill"
+              style={{ width: diffData?.files?.length ? `${(reviewedCount / diffData.files.length) * 100}%` : '0%' }}
+            />
           </div>
         </div>
 
@@ -261,15 +293,15 @@ export default function ReviewView() {
           />
 
           {globalComments.length > 0 && (
-            <div className="bg-bg-soft border border-bg-line rounded p-3 mb-3">
-              <h3 className="text-sm font-semibold mb-2">Global comments ({globalComments.length})</h3>
-              <ul className="space-y-2">
-                {globalComments.map((c) => (
-                  <li key={c.id} className="text-sm">
-                    <div className="text-xs text-text-muted">
-                      <b>{c.author}</b> • {c.created_at}
+            <div className="lr-paper p-4 mb-4">
+              <div className="lr-eyebrow mb-2">Notes · {globalComments.length}</div>
+              <ul className="space-y-3 divide-y divide-bg-line">
+                {globalComments.map((c, i) => (
+                  <li key={c.id} className={`text-sm ${i > 0 ? 'pt-3' : ''}`}>
+                    <div className="text-xs text-text-muted mb-1">
+                      <b className="text-text">{c.author}</b> · <span className="text-text-dim font-mono">{c.created_at}</span>
                     </div>
-                    <div className="whitespace-pre-wrap">{c.body}</div>
+                    <div className="lr-serif text-[14px] leading-relaxed whitespace-pre-wrap">{c.body}</div>
                   </li>
                 ))}
               </ul>

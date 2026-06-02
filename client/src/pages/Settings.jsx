@@ -107,14 +107,20 @@ export default function Settings() {
   const enabledGoalCount = goals.filter((g) => g.enabled).length;
 
   return (
-    <div className="max-w-3xl mx-auto p-6 pb-12">
+    <div className="max-w-3xl mx-auto px-6 py-8 pb-12">
+      <div className="mb-8">
+        <div className="lr-eyebrow mb-1">Settings · Masthead</div>
+        <h1 className="lr-serif text-[34px] font-semibold leading-tight tracking-tight">House style &amp; the board</h1>
+      </div>
+
       {/* ─── Goals ─── */}
-      <h1 className="text-xl mb-2">Review goals</h1>
-      <p className="text-sm text-text-muted mb-4">
-        Persistent things you care about in every review (security gotchas, style rules,
-        domain-specific invariants). Agents that have <b>Include goals</b> turned on get these
-        injected into their prompt — either at the <code className="bg-bg-soft px-1 rounded">{'{{goals}}'}</code>{' '}
-        placeholder or auto-prepended.
+      <div className="lr-eyebrow mb-1">Persistent</div>
+      <h2 className="lr-serif text-[24px] font-semibold leading-tight mb-2">House Style</h2>
+      <p className="lr-serif text-[14px] italic text-text-muted mb-4 max-w-prose">
+        Things you care about in every review — security gotchas, style rules,
+        domain-specific invariants. Agents that have <b className="not-italic">Include goals</b> turned on get these
+        injected into their prompt at the <code className="bg-bg-soft px-1 rounded font-mono not-italic">{'{{goals}}'}</code>{' '}
+        placeholder, or auto-prepended.
       </p>
       <ul className="space-y-2 mb-3">
         {goals.length === 0 && (
@@ -143,16 +149,19 @@ export default function Settings() {
         + new goal
       </button>
 
+      <div className="lr-ornament mt-10 mb-6">❧</div>
+
       {/* ─── Agents ─── */}
-      <h1 className="text-xl mt-10 mb-2">AI agents</h1>
-      <p className="text-sm text-text-muted mb-4">
-        Shell commands that review diffs. Your prompt template receives{' '}
-        <code className="bg-bg-soft px-1 rounded">{'{{diff}}'}</code>,{' '}
-        <code className="bg-bg-soft px-1 rounded">{'{{file_paths}}'}</code>,{' '}
-        <code className="bg-bg-soft px-1 rounded">{'{{base}}'}</code>,{' '}
-        <code className="bg-bg-soft px-1 rounded">{'{{head}}'}</code>, and (when{' '}
-        <i>Include goals</i> is on) <code className="bg-bg-soft px-1 rounded">{'{{goals}}'}</code> on stdin.
-        Output should be a JSON array of findings.
+      <div className="lr-eyebrow mb-1">Reviewers &amp; revisers</div>
+      <h2 className="lr-serif text-[24px] font-semibold leading-tight mb-2">Editorial Board</h2>
+      <p className="lr-serif text-[14px] italic text-text-muted mb-4 max-w-prose">
+        Shell commands that review diffs (or apply revisions). Your prompt template receives{' '}
+        <code className="bg-bg-soft px-1 rounded font-mono not-italic">{'{{diff}}'}</code>,{' '}
+        <code className="bg-bg-soft px-1 rounded font-mono not-italic">{'{{file_paths}}'}</code>,{' '}
+        <code className="bg-bg-soft px-1 rounded font-mono not-italic">{'{{base}}'}</code>,{' '}
+        <code className="bg-bg-soft px-1 rounded font-mono not-italic">{'{{head}}'}</code>, and (when{' '}
+        <i>Include goals</i> is on) <code className="bg-bg-soft px-1 rounded font-mono not-italic">{'{{goals}}'}</code> on stdin.
+        Reviewers should emit a JSON array of findings.
       </p>
 
       <ul className="space-y-2 mb-4">

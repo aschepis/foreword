@@ -59,20 +59,29 @@ export default function RepoView() {
   if (!repo) return <div className="p-6 text-text-muted">Loading…</div>;
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <div className="mb-4 text-text-muted text-sm"><Link to="/" className="hover:text-accent">← repos</Link></div>
-      <h1 className="text-xl">{repo.name}</h1>
-      <div className="text-xs text-text-muted font-mono mb-6">{repo.path}</div>
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="mb-4">
+        <Link to="/" className="lr-eyebrow text-text-muted hover:text-text">← The Desk</Link>
+      </div>
 
-      <div className="bg-bg-soft border border-bg-line rounded p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold">Start a review</h2>
-          <button onClick={refresh} className="text-xs text-text-muted hover:text-accent">refresh worktrees</button>
+      {/* ─── Repo identity ──────────────────────────────────────────── */}
+      <div className="lr-eyebrow mb-1">Repository</div>
+      <h1 className="lr-serif text-[34px] font-semibold leading-tight tracking-tight">{repo.name}</h1>
+      <div className="text-xs text-text-muted font-mono mt-1 mb-7">{repo.path}</div>
+
+      {/* ─── Start a review ─────────────────────────────────────────── */}
+      <section className="lr-paper p-5 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="lr-eyebrow">Begin</div>
+            <h2 className="lr-serif text-[20px] font-semibold leading-tight">Start a review</h2>
+          </div>
+          <button onClick={refresh} className="lr-eyebrow text-text-muted hover:text-text">↻ refresh worktrees</button>
         </div>
-        <form onSubmit={startReview} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <form onSubmit={startReview} className="space-y-3">
           <label className="block">
-            <div className="text-xs text-text-muted mb-1">Worktree</div>
-            <select className="bg-bg border border-bg-line rounded px-2 py-1.5 w-full text-sm"
+            <div className="lr-eyebrow text-text-dim mb-1">Worktree</div>
+            <select className="w-full text-sm font-mono"
                     value={worktree} onChange={(e) => setWorktree(e.target.value)}>
               {repo.worktrees?.map((w) => (
                 <option key={w.path} value={w.path}>
@@ -81,43 +90,53 @@ export default function RepoView() {
               ))}
             </select>
           </label>
-          <label className="block">
-            <div className="text-xs text-text-muted mb-1">Base</div>
-            <input list="branches" className="bg-bg border border-bg-line rounded px-2 py-1.5 w-full text-sm font-mono"
-                   value={baseRef} onChange={(e) => setBaseRef(e.target.value)} placeholder={repo.default_branch || 'main'} />
-          </label>
-          <label className="block">
-            <div className="text-xs text-text-muted mb-1">Head</div>
-            <input list="branches" className="bg-bg border border-bg-line rounded px-2 py-1.5 w-full text-sm font-mono"
-                   value={headRef} onChange={(e) => setHeadRef(e.target.value)} />
-          </label>
-          <button className="bg-accent text-bg font-semibold rounded px-3 py-2 text-sm disabled:opacity-50" disabled={busy || !headRef}>
-            Generate review
-          </button>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <label className="block">
+              <div className="lr-eyebrow text-text-dim mb-1">Base</div>
+              <input list="branches" className="w-full text-sm font-mono"
+                     value={baseRef} onChange={(e) => setBaseRef(e.target.value)} placeholder={repo.default_branch || 'main'} />
+            </label>
+            <label className="block">
+              <div className="lr-eyebrow text-text-dim mb-1">Head</div>
+              <input list="branches" className="w-full text-sm font-mono"
+                     value={headRef} onChange={(e) => setHeadRef(e.target.value)} />
+            </label>
+            <button className="bg-accent text-bg font-semibold rounded px-4 py-2 text-sm h-fit disabled:opacity-50" disabled={busy || !headRef}>
+              Generate review
+            </button>
+          </div>
           <datalist id="branches">
             {branches?.branches?.map((b) => <option key={b} value={b} />)}
           </datalist>
         </form>
-        {err && <div className="mt-2 text-accent-red text-sm">{err}</div>}
-      </div>
+        {err && <div className="mt-3 text-accent-red text-sm">{err}</div>}
+      </section>
 
-      <h2 className="font-semibold mb-2">Recent reviews</h2>
-      {reviews.length === 0 && <div className="text-text-muted text-sm">No reviews yet.</div>}
-      <ul className="space-y-2">
-        {reviews.map((r) => (
-          <li key={r.id} className="bg-bg-soft border border-bg-line rounded p-3 flex items-center gap-3">
-            <Link to={`/reviews/${r.id}`} className="flex-1 font-mono text-sm">
-              <span className="text-accent">{r.head_ref}</span>
-              <span className="text-text-muted"> vs </span>
-              <span className="text-accent-purple">{r.base_ref}</span>
-              <span className="text-text-dim text-xs ml-2">{r.head_sha?.slice(0,7)}…{r.base_sha?.slice(0,7)}</span>
-            </Link>
-            <span className="text-xs text-text-dim">{r.created_at}</span>
-            <button onClick={async () => { await api.reviews.delete(r.id); loadReviews(); }}
-                    className="text-xs text-text-muted hover:text-accent-red">delete</button>
-          </li>
-        ))}
-      </ul>
+      {/* ─── Recent reviews ─────────────────────────────────────────── */}
+      <div className="lr-eyebrow mb-3">Recent drafts</div>
+      {reviews.length === 0 ? (
+        <div className="lr-paper p-6 max-w-prose">
+          <p className="lr-serif italic text-[15px] text-text lr-dropcap">
+            No drafts in progress. Pick a head branch above and a review will appear here.
+          </p>
+        </div>
+      ) : (
+        <ul className="lr-paper divide-y divide-bg-line">
+          {reviews.map((r) => (
+            <li key={r.id} className="px-4 py-3 flex items-center gap-3 hover:bg-bg-hover transition-colors">
+              <Link to={`/reviews/${r.id}`} className="flex-1 font-mono text-sm hover:no-underline">
+                <span className="text-accent font-semibold">{r.head_ref}</span>
+                <span className="text-text-muted mx-2">←</span>
+                <span className="text-accent-purple">{r.base_ref}</span>
+                <span className="text-text-dim text-xs ml-3">{r.head_sha?.slice(0,7)}…{r.base_sha?.slice(0,7)}</span>
+              </Link>
+              <span className="text-xs text-text-dim font-mono">{r.created_at}</span>
+              <button onClick={async () => { await api.reviews.delete(r.id); loadReviews(); }}
+                      className="text-xs text-text-dim hover:text-accent-red">delete</button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
