@@ -200,8 +200,30 @@ export async function getFixableWork({ review_id }) {
 
 export async function markCommentFixed({ comment_id, commit_sha, message }) {
   if (!comment_id) throw new Error('comment_id is required');
-  const existing = db.prepare('SELECT * FROM comments WHERE id = ?').get(comment_id);
-  if (!existing) throw new Error(`comment #${comment_id} not found`);
+
+  /* Scoped lookup: the comment must (a) exist, (b) be flagged
+     agent_fixable=1 by the user, AND (c) belong to a review that was
+     created via MCP (mcp_session_id IS NOT NULL). This prevents an
+     agent from clobbering fix_status on unrelated/non-fixable
+     comments or on reviews it didn't initiate. */
+  const eligible = db.prepare(
+    `SELECT c.* FROM comments c
+       JOIN reviews r ON r.id = c.review_id
+      WHERE c.id = ?
+        AND c.agent_fixable = 1
+        AND r.mcp_session_id IS NOT NULL`
+  ).get(comment_id);
+
+  if (!eligible) {
+    /* Disambiguate the error so the agent knows whether it's an id
+       miss, an authorization miss, or a non-MCP review miss. */
+    const raw = db.prepare('SELECT id, agent_fixable, review_id FROM comments WHERE id = ?').get(comment_id);
+    if (!raw) throw new Error(`comment #${comment_id} not found`);
+    if (!raw.agent_fixable) throw new Error(`comment #${comment_id} is not flagged agent_fixable; only user-marked comments can be closed by an agent`);
+    const r = db.prepare('SELECT mcp_session_id FROM reviews WHERE id = ?').get(raw.review_id);
+    if (!r?.mcp_session_id) throw new Error(`comment #${comment_id} belongs to a review that was not created via MCP`);
+    throw new Error(`comment #${comment_id} is not eligible to be marked fixed`);
+  }
 
   db.prepare(
     `UPDATE comments
