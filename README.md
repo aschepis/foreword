@@ -293,8 +293,6 @@ Always append to the `MIGRATIONS` array in `server/db.js` as a separate `ALTER T
 
 ---
 
----
-
 ## MCP server (handoff loop with coding agents)
 
 Foreword exposes an MCP (Model Context Protocol) server at `/mcp` so a
