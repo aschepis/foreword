@@ -265,7 +265,12 @@ export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }) 
   const baselineSignaledAt = review.signaled_at;
 
   /* Polling cadence: 750ms is responsive enough to feel snappy without
-     pegging the SQLite handle. */
+     pegging the SQLite handle.
+     TODO: This is ~800 SELECTs per concurrent waiter across the 600s
+     ceiling. Fine for local single-user use today, but if this ever
+     scales (multi-agent / remote MCP), wire an in-process EventEmitter
+     that the POST /api/reviews/:id/signal route fires; the poll loop
+     becomes a safety net instead of the primary mechanism. */
   while (Date.now() - startedAt < timeoutMs) {
     const fresh = db
       .prepare('SELECT signaled_at FROM reviews WHERE id = ?')
