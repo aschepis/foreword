@@ -151,15 +151,25 @@ export default function ReviewView() {
   /* ── MCP handoff: "Send to agent" ──────────────────────────────────── */
   const [sending, setSending] = useState(false);
   const [sentAt, setSentAt] = useState(null);
+  const [sendError, setSendError] = useState(null);
+
+  /* Auto-reset the "sent" indicator after 2s so the button is available
+     again if the agent times out and re-calls wait_for_review_signal. */
+  useEffect(() => {
+    if (!sentAt) return;
+    const t = setTimeout(() => setSentAt(null), 2000);
+    return () => clearTimeout(t);
+  }, [sentAt]);
 
   async function sendToAgent() {
     if (!review?.mcp_session_id) return;
-    setSending(true);
+    setSending(true); setSendError(null);
     try {
       const r = await api.reviews.signal(reviewId);
       setSentAt(r.signaled_at);
-    } catch (e) { console.warn('signal failed', e); }
-    finally { setSending(false); }
+    } catch (e) {
+      setSendError(e.message || 'Signal failed');
+    } finally { setSending(false); }
   }
 
   async function refreshHead() {
@@ -278,8 +288,10 @@ export default function ReviewView() {
               {review.mcp_session_id && (
                 <button
                   onClick={sendToAgent}
-                  disabled={sending}
-                  title="Hand the review back to the MCP-connected agent"
+                  disabled={sending || !!sentAt}
+                  title={sentAt
+                    ? 'Sent — agent has been notified. Button will re-enable in 2s.'
+                    : 'Hand the review back to the MCP-connected agent'}
                   className="bg-accent text-bg font-semibold rounded px-3 py-1 text-xs whitespace-nowrap disabled:opacity-50 hover:brightness-110"
                 >
                   {sending ? 'Sending…' : sentAt ? '↩ sent' : '↩ Send to agent'}
@@ -287,6 +299,13 @@ export default function ReviewView() {
               )}
             </div>
           </div>
+          {sendError && (
+            <div className="border-t border-accent-red/40 bg-[color:var(--tint-red)] text-accent-red px-4 py-2 text-xs flex items-center gap-3">
+              <span aria-hidden>⚠</span>
+              <span className="flex-1 text-text"><b>Send to agent failed:</b> {sendError}</span>
+              <button onClick={() => setSendError(null)} className="text-text-muted hover:text-text">✕</button>
+            </div>
+          )}
           {/* Drift banner — surfaces when worktree HEAD has moved */}
           <DriftBanner state={driftState} busy={refreshing} onRefresh={refreshHead} />
           {/* Reading-progress hairline */}
