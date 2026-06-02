@@ -29,7 +29,14 @@ export function runCommand(command, input, cwd, timeoutMs) {
 
     const env = {
       ...process.env,
-      ...(promptFile ? { LOCAL_REVIEW_PROMPT_FILE: promptFile, LOCAL_REVIEW_PROMPT_FILE_DIR: tempDir } : {}),
+      ...(promptFile ? {
+        FOREWORD_PROMPT_FILE: promptFile,
+        FOREWORD_PROMPT_FILE_DIR: tempDir,
+        /* Legacy aliases — kept so existing agent commands referencing the
+           old names keep working through the rename. Remove after a grace period. */
+        LOCAL_REVIEW_PROMPT_FILE: promptFile,
+        LOCAL_REVIEW_PROMPT_FILE_DIR: tempDir,
+      } : {}),
     };
 
     const child = spawn('sh', ['-c', command], { cwd, env });

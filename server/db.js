@@ -3,9 +3,28 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 
-const dataDir = process.env.LOCAL_REVIEW_DATA_DIR || path.join(os.homedir(), '.local-review');
-fs.mkdirSync(dataDir, { recursive: true });
-const dbPath = path.join(dataDir, 'data.sqlite');
+function resolveDataDir() {
+  const envDir = process.env.FOREWORD_DATA_DIR || process.env.LOCAL_REVIEW_DATA_DIR;
+  if (envDir) return envDir;
+  const target = path.join(os.homedir(), '.foreword');
+  const legacy = path.join(os.homedir(), '.local-review');
+  /* One-shot migration from the pre-rename location. If the legacy dir exists
+     and the new one doesn't yet, rename it in place — atomic on the same
+     filesystem, preserves WAL/SHM siblings, no copies. */
+  if (fs.existsSync(legacy) && !fs.existsSync(target)) {
+    try {
+      fs.renameSync(legacy, target);
+      console.warn(`[foreword] Migrated data directory ${legacy} -> ${target}`);
+    } catch (e) {
+      console.warn(`[foreword] Could not rename ${legacy} -> ${target}: ${e.message}. Using legacy directory in place.`);
+      return legacy;
+    }
+  }
+  return target;
+}
+export const DATA_DIR = resolveDataDir();
+fs.mkdirSync(DATA_DIR, { recursive: true });
+const dbPath = path.join(DATA_DIR, 'data.sqlite');
 
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');

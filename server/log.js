@@ -65,7 +65,7 @@ export function requestLogger() {
 export function banner(port, dbPath) {
   // eslint-disable-next-line no-console
   console.log(`
-${c.bold(c.magenta('▌'))} ${c.bold('local-review')} ${c.dim('— self-review for the agentic era')}
+${c.bold(c.magenta('▌'))} ${c.bold('foreword')} ${c.dim('— self-review for the agentic era')}
   ${c.dim('server')}  http://localhost:${c.bold(port)}
   ${c.dim('db    ')}  ${dbPath}
   ${c.dim('pid   ')}  ${process.pid}

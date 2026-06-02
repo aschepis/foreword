@@ -10,7 +10,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-bg-line bg-bg-soft px-4 py-2 flex items-center gap-4">
         <Link to="/" className="font-semibold text-text flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-accent" /> Local Review
+          <span className="inline-block w-2 h-2 rounded-full bg-accent" /> Foreword
         </Link>
         <nav className="flex gap-3 text-sm text-text-muted">
           <NavLink to="/" end className={({isActive}) => isActive ? 'text-text' : 'hover:text-text'}>Repos</NavLink>

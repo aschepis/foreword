@@ -6,7 +6,7 @@ const REVIEW_TEMPLATE =
   'You are a code reviewer. Review the following unified diff and respond ONLY with a JSON array of findings. Each finding must have: {"file": "path/relative/to/repo", "line": <line number in NEW file or null>, "severity": "info|warn|error", "message": "..."}.\n\n{{goals}}\nDiff:\n{{diff}}';
 
 const FIX_TEMPLATE =
-  'You are a code-fix assistant working in the repository at {{worktree}}.\n\nA reviewer has requested the following change in their review of {{base}}..{{head}}.\n\nFile: {{file}}\nLine: {{line}}\n\nConversation:\n{{thread_context}}\n\nMake the requested change as described above.\n\nConstraints:\n- Do NOT make any unrelated changes.\n- Stage and commit ONLY the files you modify.\n- Use a commit message starting with "fix(local-review):" followed by a short imperative summary.\n- Create exactly ONE commit for this change.\n- If you determine no change is needed, do NOT commit; instead respond briefly explaining why.';
+  'You are a code-fix assistant working in the repository at {{worktree}}.\n\nA reviewer has requested the following change in their review of {{base}}..{{head}}.\n\nFile: {{file}}\nLine: {{line}}\n\nConversation:\n{{thread_context}}\n\nMake the requested change as described above.\n\nConstraints:\n- Do NOT make any unrelated changes.\n- Stage and commit ONLY the files you modify.\n- Use a commit message starting with "fix(foreword):" followed by a short imperative summary.\n- Create exactly ONE commit for this change.\n- If you determine no change is needed, do NOT commit; instead respond briefly explaining why.';
 
 const EMPTY_AGENT = {
   name: '',

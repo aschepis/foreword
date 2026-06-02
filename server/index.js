@@ -1,9 +1,8 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import './db.js';
+import { DATA_DIR } from './db.js';
 import { log, requestLogger, banner } from './log.js';
 
 import reposRouter from './routes/repos.js';
@@ -51,8 +50,7 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-const dataDir = process.env.LOCAL_REVIEW_DATA_DIR || path.join(os.homedir(), '.local-review');
-app.listen(PORT, () => banner(PORT, path.join(dataDir, 'data.sqlite')));
+app.listen(PORT, () => banner(PORT, path.join(DATA_DIR, 'data.sqlite')));
 
 process.on('uncaughtException', (e) => log.error('uncaught', e));
 process.on('unhandledRejection', (e) => log.error('unhandled rejection', e));

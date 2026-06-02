@@ -27,7 +27,7 @@ export default function Home() {
   }
 
   async function del(id) {
-    if (!confirm('Remove this repo from local-review? (does not delete files)')) return;
+    if (!confirm('Remove this repo from Foreword? (does not delete files)')) return;
     await api.repos.delete(id);
     load();
   }

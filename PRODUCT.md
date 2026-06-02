@@ -1,4 +1,4 @@
-# Local Review — Product Plan
+# Foreword — Product Plan
 
 > The self-review tool for the agentic-coding era.
 
@@ -18,7 +18,7 @@ Everything off-the-shelf where possible — no custom diff parser, no custom syn
 ## Core requirements (from the README)
 
 1. Web server on **port 3200** (configurable via `PORT`).
-2. Local **SQLite** storage at `~/.local-review/data.sqlite`.
+2. Local **SQLite** storage at `~/.foreword/data.sqlite` (legacy: `~/.local-review`).
 3. **Add a repo** by absolute path; validate it's a git repo; **enumerate worktrees** via `git worktree list --porcelain`.
 4. **Branch picker** — list local + remote branches, pick a base and a head; default head = current branch, base = `main`/`master`/merge-base.
 5. **Beautiful diff** — `diff2html` side-by-side, syntax-highlighted, file tree sidebar, sticky file headers.
