@@ -7,7 +7,7 @@ function fillTemplate(tpl, vars) {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => (k in vars ? String(vars[k]) : ''));
 }
 
-function buildThreadContext(comment) {
+export function buildThreadContext(comment) {
   /* Walk up via parent_id; gather siblings (replies that share parent_id with this comment),
      and the chain of ancestors. Returns a markdown rendering of the conversation. */
   const root = (() => {

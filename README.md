@@ -293,6 +293,77 @@ Always append to the `MIGRATIONS` array in `server/db.js` as a separate `ALTER T
 
 ---
 
+---
+
+## MCP server (handoff loop with coding agents)
+
+Foreword exposes an MCP (Model Context Protocol) server at `/mcp` so a
+coding agent (Claude Code, etc.) can open reviews for the user, wait
+for feedback, and act on the comments — all from the same agent
+session that wrote the code in the first place.
+
+### Setup
+
+Foreword must already be running. Then:
+
+```bash
+claude mcp add --transport http foreword http://localhost:3200/mcp
+```
+
+(Adjust the URL if you've moved Foreword to a different port.)
+
+### Tools
+
+| Tool | Purpose |
+|---|---|
+| `create_review` | Create a Foreword review on a branch and optionally open it in the user's browser. Auto-registers the repo if Foreword doesn't know about it yet. Returns the review id, URL, and an `mcp_session_id` that flags this review as agent-initiated. |
+| `list_comments` | List all comments on a review. Optional filter: `all`, `fixable_pending`, `human`, `agent_findings`. |
+| `get_fixable_work` | Return comments the user flagged as agent-fixable and not yet addressed. Each item includes `thread_markdown` — a pre-rendered conversation so you don't have to walk `parent_id` chains. |
+| `mark_comment_fixed` | After applying a fix and committing, mark the comment so future calls skip it. `commit_sha` is recorded as audit trail. |
+| `wait_for_review_signal` | Long-poll. Blocks until the user clicks "Send to agent" in the review UI, or until the timeout expires (default 300s, max 600s). Re-callable. |
+
+### The handoff loop
+
+```
+User → Claude Code: "Add Stripe webhook handling."
+Claude Code:        [writes code, commits]
+Claude Code → MCP:  create_review(repo_path, head_ref, launch=true)
+                    → browser opens at /reviews/N
+User:               [reviews the diff, leaves comments,
+                     ticks "agent-fixable", clicks "Send to agent"]
+Claude Code → MCP:  wait_for_review_signal(review_id)
+                    → returns when user clicks Send
+Claude Code → MCP:  get_fixable_work(review_id)
+                    → comments to address, with full thread context
+Claude Code:        [applies each fix with full conversational context,
+                     commits each separately]
+Claude Code → MCP:  mark_comment_fixed(comment_id, commit_sha) ×N
+Claude Code → User: "Addressed the two flagged items.
+                     About the third — I think we should ___. Want me to?"
+```
+
+MCP-initiated reviews show a `via MCP` chip in the running header and
+an explicit **↩ Send to agent** button next to the refresh button.
+Plain UI-initiated reviews never see either — they keep the existing
+"trigger Foreword's own fix agent" flow.
+
+### Why this pattern is better
+
+The agent that wrote the code has full conversational context — recent
+decisions, the user's tone, why a particular tradeoff was made. The
+review surface gives the user a visual diff to leave structured,
+file:line-anchored feedback on. Pulling that feedback back to the same
+agent session is dramatically tighter than restarting in a fresh
+shell-out (which is what Foreword's built-in fix agent does).
+
+The pattern mirrors Sublime's `/annotate` at smaller scale: agent
+opens a review surface, user annotates, structured feedback returns —
+but extended to **branch-scoped diffs** with Foreword's richer review
+state (persistence, multi-reviewer findings, agent-fixable flags, time
+travel).
+
+---
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

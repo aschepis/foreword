@@ -22,11 +22,13 @@
     "postinstall": "echo 'run: pnpm build && pnpm start (or pnpm dev)'"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^11.3.0",
     "express": "^4.21.0",
     "react-diff-view": "^3.3.3",
     "refractor": "^5.0.0",
-    "simple-git": "^3.27.0"
+    "simple-git": "^3.27.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",

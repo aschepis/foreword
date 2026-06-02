@@ -148,6 +148,20 @@ export default function ReviewView() {
   const { state: driftState, refresh: refetchDrift } = useDriftPoll(reviewId);
   const [refreshing, setRefreshing] = useState(false);
 
+  /* ── MCP handoff: "Send to agent" ──────────────────────────────────── */
+  const [sending, setSending] = useState(false);
+  const [sentAt, setSentAt] = useState(null);
+
+  async function sendToAgent() {
+    if (!review?.mcp_session_id) return;
+    setSending(true);
+    try {
+      const r = await api.reviews.signal(reviewId);
+      setSentAt(r.signaled_at);
+    } catch (e) { console.warn('signal failed', e); }
+    finally { setSending(false); }
+  }
+
   async function refreshHead() {
     setRefreshing(true);
     try {
@@ -231,6 +245,11 @@ export default function ReviewView() {
                 <span className="text-text-muted mx-1.5">←</span>
                 <span className="text-accent-purple">{review.base_ref}</span>
                 <span className="text-text-dim text-[11px] ml-2">{review.base_sha?.slice(0,7)}…{review.head_sha?.slice(0,7)}</span>
+                {review.mcp_session_id && (
+                  <span className="text-[10px] px-2 py-0.5 rounded ml-2 lr-meta-badge-agent" title="This review was opened by an MCP-connected agent">
+                    via MCP
+                  </span>
+                )}
               </div>
             </div>
             <div className="ml-auto flex items-center gap-3 text-xs">
@@ -256,6 +275,16 @@ export default function ReviewView() {
                 title="Refresh the diff against the worktree's current HEAD"
                 className="text-text-muted hover:text-accent whitespace-nowrap disabled:opacity-50"
               >{refreshing ? '↻ …' : '↻ refresh'}</button>
+              {review.mcp_session_id && (
+                <button
+                  onClick={sendToAgent}
+                  disabled={sending}
+                  title="Hand the review back to the MCP-connected agent"
+                  className="bg-accent text-bg font-semibold rounded px-3 py-1 text-xs whitespace-nowrap disabled:opacity-50 hover:brightness-110"
+                >
+                  {sending ? 'Sending…' : sentAt ? '↩ sent' : '↩ Send to agent'}
+                </button>
+              )}
             </div>
           </div>
           {/* Drift banner — surfaces when worktree HEAD has moved */}
