@@ -42,18 +42,35 @@ async function ensureRepoRegistered(repoPath) {
   if (!(await isGitRepo(abs))) {
     throw new Error(`${abs} is not a git repository`);
   }
-  let row = db.prepare('SELECT * FROM repos WHERE path = ?').get(abs);
-  if (!row) {
-    const name = await repoName(abs);
-    const defaultBranch = await detectDefaultBranch(abs);
+
+  /* Fast path: already registered, no work to do. */
+  const existing = db.prepare('SELECT * FROM repos WHERE path = ?').get(abs);
+  if (existing) return existing;
+
+  /* Async git operations happen outside the transaction; better-sqlite3
+     transactions are synchronous and shouldn't span awaits. */
+  const name = await repoName(abs);
+  const defaultBranch = await detectDefaultBranch(abs);
+  const wts = await enumerateWorktrees(abs);
+
+  /* Race-safe registration: INSERT OR IGNORE + SELECT inside a single
+     transaction. If two callers race, the loser's INSERT no-ops and
+     SELECT returns the winner's row; worktrees are populated only on
+     the winning side (info.changes === 1). The schema's UNIQUE(path)
+     on repos provides the atomicity guarantee. */
+  const tx = db.transaction(() => {
     const info = db
-      .prepare('INSERT INTO repos (path, name, default_branch) VALUES (?, ?, ?)')
+      .prepare('INSERT OR IGNORE INTO repos (path, name, default_branch) VALUES (?, ?, ?)')
       .run(abs, name, defaultBranch);
-    row = db.prepare('SELECT * FROM repos WHERE id = ?').get(info.lastInsertRowid);
-    /* Refresh worktrees while we're at it so the UI sees them. */
-    const wts = await enumerateWorktrees(abs);
-    const ins = db.prepare('INSERT INTO worktrees (repo_id, path, branch, is_main) VALUES (?, ?, ?, ?)');
-    for (const wt of wts) ins.run(row.id, wt.path, wt.branch, wt.path === abs ? 1 : 0);
+    const row = db.prepare('SELECT * FROM repos WHERE path = ?').get(abs);
+    if (info.changes > 0) {
+      const ins = db.prepare('INSERT INTO worktrees (repo_id, path, branch, is_main) VALUES (?, ?, ?, ?)');
+      for (const wt of wts) ins.run(row.id, wt.path, wt.branch, wt.path === abs ? 1 : 0);
+    }
+    return { row, inserted: info.changes > 0 };
+  });
+  const { row, inserted } = tx();
+  if (inserted) {
     log.info(`MCP auto-registered repo ${abs} (#${row.id})`);
   }
   return row;
