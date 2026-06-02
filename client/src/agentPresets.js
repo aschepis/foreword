@@ -46,19 +46,21 @@ export const AGENT_PRESETS = {
     id: 'gemini',
     label: 'Gemini CLI',
     bin: 'gemini',
-    hint: 'Google\'s Gemini CLI. The runner writes the prompt to a temp file and we point Gemini at it via its @file syntax, so even huge diffs don\'t hit ARG_MAX.',
+    hint: 'Google\'s Gemini CLI. `-p ""` engages headless mode; the actual prompt comes from stdin (Gemini appends the -p value to stdin), so no ARG_MAX concern. Model list may lag Google\'s releases — switch to "Other" and use --model with a current ID if needed.',
     models: [
-      { id: 'gemini-3-pro', label: 'Gemini 3 Pro' },
-      { id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — most capable' },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — fast / cheap' },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash — older fast' },
+      { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro — older capable' },
     ],
-    defaultModel: 'gemini-3-pro',
+    defaultModel: 'gemini-2.5-pro',
     buildCommand: (model, kind) => {
       const m = model ? ` --model ${model}` : '';
-      /* The runner exposes the rendered prompt at $LOCAL_REVIEW_PROMPT_FILE.
-         `@<path>` is Gemini CLI's file-inclusion syntax — it reads the file
-         into the prompt instead of passing it as argv, sidestepping ARG_MAX. */
-      if (kind === 'fix') return `gemini --yolo -p "@$LOCAL_REVIEW_PROMPT_FILE"${m}`;
-      return `gemini -p "@$LOCAL_REVIEW_PROMPT_FILE"${m}`;
+      /* Gemini requires `-p` to receive *some* value to switch into headless
+         mode, but it then APPENDS that value to whatever is on stdin. Passing
+         "" means the effective prompt is just stdin, which the runner pipes. */
+      if (kind === 'fix') return `gemini --yolo -p ""${m}`;
+      return `gemini -p ""${m}`;
     },
   },
   other: {

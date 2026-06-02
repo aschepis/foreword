@@ -180,7 +180,20 @@ export default function Settings() {
                 </span>
               ) : null}
               <div className="font-mono text-xs text-text-muted flex-1 truncate">{a.command}</div>
-              <button onClick={() => setEditingAgent(a)} className="text-xs text-accent hover:underline">edit</button>
+              <button
+                onClick={() => {
+                  /* For preset-based agents, regenerate the command from the
+                     current preset on edit-open so stale stored commands get
+                     healed when the user saves. */
+                  const preset = a.provider && a.provider !== 'other' ? AGENT_PRESETS[a.provider] : null;
+                  if (preset && a.model) {
+                    const fresh = preset.buildCommand(a.model, a.kind || 'review');
+                    setEditingAgent({ ...a, command: fresh, _originalCommand: a.command });
+                  } else {
+                    setEditingAgent(a);
+                  }
+                }}
+                className="text-xs text-accent hover:underline">edit</button>
               <button onClick={() => delAgent(a)} className="text-xs text-accent-red hover:underline">delete</button>
             </div>
           </li>
@@ -334,10 +347,18 @@ export default function Settings() {
             )}
 
             <label className="block">
-              <div className="text-xs text-text-muted mb-1">
-                Shell command — receives prompt on stdin
+              <div className="text-xs text-text-muted mb-1 flex items-center gap-2">
+                <span>Shell command — receives prompt on stdin</span>
                 {provider !== 'other' && (
-                  <span className="text-text-dim ml-2">(auto-generated; switch to "Other" to fully customize)</span>
+                  <span className="text-text-dim">(auto-generated; switch to "Other" to fully customize)</span>
+                )}
+                {provider !== 'other' && (
+                  <button
+                    type="button"
+                    onClick={() => setModel(editingAgent.model || preset.defaultModel)}
+                    className="text-accent hover:underline ml-auto"
+                    title="Regenerate the command from the current preset + model"
+                  >↻ regenerate</button>
                 )}
               </div>
               <input className="w-full bg-bg border border-bg-line rounded px-2 py-1.5 text-sm font-mono disabled:opacity-70"
@@ -347,6 +368,11 @@ export default function Settings() {
                      value={editingAgent.command}
                      disabled={provider !== 'other'}
                      onChange={(e) => setEditingAgent({...editingAgent, command: e.target.value})} />
+              {editingAgent._originalCommand && editingAgent._originalCommand !== editingAgent.command && (
+                <div className="text-[11px] text-accent-yellow mt-1">
+                  ⚠ Stored command was <span className="font-mono">{editingAgent._originalCommand}</span> — will be replaced on save.
+                </div>
+              )}
             </label>
             <label className="block">
               <div className="text-xs text-text-muted mb-1">Prompt template</div>
