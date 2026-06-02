@@ -149,6 +149,4 @@ router.get('/', (req, res) => res.status(405).json({
   id: null,
 }));
 
-log.info('MCP server mounted at /mcp (stateless, per-request server)');
-
 export default router;

@@ -35,6 +35,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/reviews', fixRouter);
 app.use('/mcp', mcpRouter);
+log.info('MCP server mounted at /mcp (stateless, per-request server)');
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
