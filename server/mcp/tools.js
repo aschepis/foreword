@@ -251,7 +251,13 @@ export async function markCommentFixed({ comment_id, commit_sha, message }) {
  * Always queries by review id (not session id) since the session id is
  * already validated at create time and is just a routing aid for the UI.
  */
-export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }) {
+/**
+ * @param {object} args
+ * @param {AbortSignal} [signal]  fires when the HTTP transport closes —
+ *   stops the poll loop so orphaned waits don't accumulate one
+ *   SELECT-every-750ms per dead connection.
+ */
+export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }, signal) {
   if (!review_id) throw new Error('review_id is required');
   const review = db.prepare('SELECT id, mcp_session_id, signaled_at FROM reviews WHERE id = ?').get(review_id);
   if (!review) throw new Error(`review #${review_id} not found`);
@@ -272,16 +278,28 @@ export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }) 
      that the POST /api/reviews/:id/signal route fires; the poll loop
      becomes a safety net instead of the primary mechanism. */
   while (Date.now() - startedAt < timeoutMs) {
+    if (signal?.aborted) break;
     const fresh = db
       .prepare('SELECT signaled_at FROM reviews WHERE id = ?')
       .get(review_id);
     if (fresh?.signaled_at && fresh.signaled_at !== baselineSignaledAt) {
       return buildSignalReturn(review_id, fresh.signaled_at, /* signaled */ true);
     }
-    await new Promise((r) => setTimeout(r, 750));
+    /* Abortable sleep: if the transport closes mid-tick we wake up
+       immediately rather than sitting on a 750ms timer. */
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, 750);
+      if (signal) {
+        signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+      }
+    });
   }
 
-  /* Timeout — return cleanly so the agent can choose to re-call. */
+  if (signal?.aborted) {
+    log.debug?.(`waitForReviewSignal review=${review_id} aborted after ${Date.now() - startedAt}ms`);
+  }
+
+  /* Timeout (or abort) — return cleanly. */
   return buildSignalReturn(review_id, baselineSignaledAt, /* signaled */ false);
 }
 

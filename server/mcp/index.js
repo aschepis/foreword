@@ -26,11 +26,14 @@ import { log } from '../log.js';
 
 const router = express.Router();
 
-/* Wrap a tool fn so it always returns MCP-shaped content + handles errors. */
+/* Wrap a tool fn so it always returns MCP-shaped content + handles errors.
+   `extra.signal` is an AbortSignal that fires when the HTTP transport
+   closes; we forward it as a second arg so long-running tools (notably
+   wait_for_review_signal) can stop their work when the agent disconnects. */
 function bind(name, impl) {
-  return async (args) => {
+  return async (args, extra) => {
     try {
-      const result = await impl(args || {});
+      const result = await impl(args || {}, extra?.signal);
       return {
         structuredContent: result,
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
