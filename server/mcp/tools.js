@@ -126,8 +126,14 @@ export async function listComments({ review_id, filter = 'all' }) {
   const review = db.prepare('SELECT id FROM reviews WHERE id = ?').get(review_id);
   if (!review) throw new Error(`review #${review_id} not found`);
 
+  /* Explicit projection. Adding a column to `comments` (e.g. an internal
+     state field) shouldn't auto-leak through the MCP surface — return
+     only what the agent contract documents. */
   let rows = db
-    .prepare('SELECT * FROM comments WHERE review_id = ? ORDER BY id ASC')
+    .prepare(`SELECT id, review_id, parent_id, path, line, side,
+                     body, author, source, agent_fixable, fix_status,
+                     fix_commit_sha, resolved, created_at, fixed_at
+              FROM comments WHERE review_id = ? ORDER BY id ASC`)
     .all(review_id);
 
   switch (filter) {
