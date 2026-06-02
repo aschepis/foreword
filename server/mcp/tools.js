@@ -5,6 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import os from 'node:os';
 import { db } from '../db.js';
 import {
   isGitRepo,
@@ -27,8 +28,17 @@ function publicBaseUrl() {
 /**
  * Auto-register a repo if it isn't tracked yet. Mirrors POST /api/repos.
  */
+function expandTilde(p) {
+  if (!p.startsWith('~')) return p;
+  const home = os.homedir();
+  if (!home) {
+    throw new Error(`cannot expand "~" — homedir is not available on this system`);
+  }
+  return path.join(home, p.slice(1));
+}
+
 async function ensureRepoRegistered(repoPath) {
-  const abs = path.resolve(repoPath.replace(/^~/, process.env.HOME || ''));
+  const abs = path.resolve(expandTilde(repoPath));
   if (!(await isGitRepo(abs))) {
     throw new Error(`${abs} is not a git repository`);
   }
