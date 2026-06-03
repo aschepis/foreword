@@ -46,6 +46,7 @@ export default function DiffView({
   outputFormat = 'side-by-side',
   onAddComment,
   onReplyToComment,
+  onToggleResolved,
   fileStatus,
   fileShas,
   onToggleReviewed,
@@ -81,6 +82,7 @@ export default function DiffView({
           comments={commentsByLine?.get(file.newPath || file.oldPath)}
           onAddComment={onAddComment}
           onReplyToComment={onReplyToComment}
+          onToggleResolved={onToggleResolved}
           status={fileStatus?.get(file.newPath || file.oldPath)}
           contentSha={fileShas?.[file.newPath || file.oldPath]}
           onToggleReviewed={onToggleReviewed}
@@ -90,7 +92,7 @@ export default function DiffView({
   );
 }
 
-function FileCard({ file, viewType, comments, onAddComment, onReplyToComment, status, contentSha, onToggleReviewed }) {
+function FileCard({ file, viewType, comments, onAddComment, onReplyToComment, onToggleResolved, status, contentSha, onToggleReviewed }) {
   const path = file.newPath || file.oldPath;
   const oldPath = file.oldPath;
   const isReviewed = status === 'reviewed';
@@ -128,7 +130,7 @@ function FileCard({ file, viewType, comments, onAddComment, onReplyToComment, st
         const threads = comments.get(lineKey);
         if (!threads || !threads.length) continue;
         w[getChangeKey(change)] = (
-          <CommentWidget threads={threads} onReplyToComment={onReplyToComment} file={path} line={lineKey} />
+          <CommentWidget threads={threads} onReplyToComment={onReplyToComment} onToggleResolved={onToggleResolved} file={path} line={lineKey} />
         );
       }
     }
@@ -160,7 +162,10 @@ function FileCard({ file, viewType, comments, onAddComment, onReplyToComment, st
           {collapsed ? '▸' : '▾'}
         </button>
         <FileTypeBadge type={file.type} />
-        <span className="lr-file-name" title={path}>{path}</span>
+        <span className="lr-file-name-wrap">
+          <span className="lr-file-name" title={path}>{path}</span>
+          <CopyPathButton path={path} />
+        </span>
         {file.type === 'rename' && oldPath !== path && (
           <span className="lr-rename-from" title={`renamed from ${oldPath}`}>
             ← {oldPath}
@@ -235,20 +240,52 @@ function FileTypeBadge({ type }) {
   return <span className={`lr-badge ${v.cls}`}>{v.label}</span>;
 }
 
+function CopyPathButton({ path }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy(e) {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(path);
+    } catch {
+      /* clipboard API unavailable (e.g. non-secure context); fall back to a temp textarea */
+      const ta = document.createElement('textarea');
+      ta.value = path;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }
+
+  return (
+    <button
+      type="button"
+      className="lr-copy-path-btn"
+      onClick={copy}
+      title={copied ? 'Copied!' : 'Copy relative path'}
+    >{copied ? '✓' : '⧉'}</button>
+  );
+}
+
 function ReviewStatusBadge({ status }) {
   if (status === 'reviewed') return <span className="lr-badge lr-badge-reviewed">REVIEWED</span>;
   if (status === 'stale') return <span className="lr-badge lr-badge-stale">CHANGED SINCE REVIEW</span>;
   return null;
 }
 
-function CommentWidget({ threads, onReplyToComment, file, line }) {
+function CommentWidget({ threads, onReplyToComment, onToggleResolved, file, line }) {
   return (
     <div className="lr-thread-container">
       {threads.map((thread, i) => {
         const root = thread[0];
         return (
           <div key={root?.id || i} className="lr-thread">
-            {thread.map((c) => <CommentItem key={c.id} c={c} />)}
+            {thread.map((c) => <CommentItem key={c.id} c={c} onToggleResolved={onToggleResolved} />)}
             {onReplyToComment && root && (
               <button
                 type="button"
@@ -263,11 +300,11 @@ function CommentWidget({ threads, onReplyToComment, file, line }) {
   );
 }
 
-function CommentItem({ c }) {
+function CommentItem({ c, onToggleResolved }) {
   const isAgent = c.source && c.source.startsWith('agent:');
   const fixStatus = c.fix_status;
   return (
-    <div className={`lr-comment ${isAgent ? 'lr-comment-agent' : ''} ${c.agent_fixable && !fixStatus ? 'lr-comment-fixable' : ''} ${fixStatus === 'fixed' ? 'lr-comment-fixed' : ''}`}>
+    <div className={`lr-comment ${isAgent ? 'lr-comment-agent' : ''} ${c.agent_fixable && !fixStatus ? 'lr-comment-fixable' : ''} ${fixStatus === 'fixed' ? 'lr-comment-fixed' : ''} ${c.resolved ? 'lr-comment-is-resolved' : ''}`}>
       <div className="lr-comment-meta">
         {isAgent && <span className="lr-meta-badge lr-meta-badge-agent">{c.source.replace('agent:', '')}</span>}
         <b>{c.author}</b>
@@ -289,6 +326,14 @@ function CommentItem({ c }) {
           <span className="lr-meta-badge lr-meta-badge-failed" title="Agent failed — see run inspector">✗ failed</span>
         )}
         {c.resolved ? <span className="lr-comment-resolved">· resolved</span> : null}
+        {onToggleResolved && (
+          <button
+            type="button"
+            className="lr-resolve-btn"
+            title={c.resolved ? 'Reopen this comment' : 'Mark this comment resolved'}
+            onClick={() => onToggleResolved(c)}
+          >{c.resolved ? '↺ Reopen' : '✓ Resolve'}</button>
+        )}
       </div>
       <div className="lr-comment-body">{c.body}</div>
     </div>

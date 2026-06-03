@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import DiffView, { fileIdFor } from '../components/DiffView.jsx';
@@ -162,6 +162,28 @@ export default function ReviewView() {
     loadComments();
   }
 
+  const scrollRef = useRef(null);
+  const toolbarRef = useRef(null);
+
+  /* The diff toolbar is sticky and variable-height (banners come and go), so
+     measure it and expose its height as --diff-header-top. File headers stick
+     just below it instead of disappearing underneath. */
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    const toolbarEl = toolbarRef.current;
+    if (!scrollEl || !toolbarEl) return;
+    const update = () => scrollEl.style.setProperty('--diff-header-top', `${toolbarEl.offsetHeight}px`);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(toolbarEl);
+    return () => ro.disconnect();
+  }, [review, diffData]);
+
+  async function toggleResolved(comment) {
+    await api.comments.update(comment.id, { resolved: comment.resolved ? 0 : 1 });
+    loadComments();
+  }
+
   async function reloadAfterFix() {
     /* Fix runs update the review's head_sha, so refetch everything that depends on it. */
     await loadReview();
@@ -271,8 +293,8 @@ export default function ReviewView() {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="bg-bg-soft sticky top-0 z-10 border-b border-bg-line">
+      <div className="flex-1 overflow-y-auto" ref={scrollRef}>
+        <div className="bg-bg-soft sticky top-0 z-10 border-b border-bg-line" ref={toolbarRef}>
           {/* Top row: identity + controls */}
           <div className="px-4 py-2.5 flex items-center gap-4 text-sm">
             <Link to={`/repos/${review.repo_id}`} className="lr-eyebrow text-text-muted hover:text-text whitespace-nowrap">← Repo</Link>
@@ -382,9 +404,16 @@ export default function ReviewView() {
               <div className="lr-eyebrow mb-2">Notes · {globalComments.length}</div>
               <ul className="space-y-3 divide-y divide-bg-line">
                 {globalComments.map((c, i) => (
-                  <li key={c.id} className={`text-sm ${i > 0 ? 'pt-3' : ''}`}>
-                    <div className="text-xs text-text-muted mb-1">
+                  <li key={c.id} className={`text-sm ${i > 0 ? 'pt-3' : ''} ${c.resolved ? 'opacity-60' : ''}`}>
+                    <div className="text-xs text-text-muted mb-1 flex items-center gap-2">
                       <b className="text-text">{c.author}</b> · <span className="text-text-dim font-mono">{c.created_at}</span>
+                      {c.resolved ? <span className="text-text-dim">· resolved</span> : null}
+                      <button
+                        type="button"
+                        onClick={() => toggleResolved(c)}
+                        className="ml-auto text-accent hover:underline whitespace-nowrap"
+                        title={c.resolved ? 'Reopen this note' : 'Mark this note resolved'}
+                      >{c.resolved ? '↺ Reopen' : '✓ Resolve'}</button>
                     </div>
                     <div className="lr-serif text-[14px] leading-relaxed whitespace-pre-wrap">{c.body}</div>
                   </li>
@@ -399,6 +428,7 @@ export default function ReviewView() {
             outputFormat={outputFormat}
             onAddComment={setAnchor}
             onReplyToComment={setAnchor}
+            onToggleResolved={toggleResolved}
             fileStatus={fileStatus}
             fileShas={diffData?.file_shas}
             onToggleReviewed={onToggleReviewed}
