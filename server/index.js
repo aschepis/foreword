@@ -15,6 +15,7 @@ import settingsRouter from './routes/settings.js';
 import adminRouter from './routes/admin.js';
 import goalsRouter from './routes/goals.js';
 import fixRouter from './routes/fix.js';
+import mcpRouter from './mcp/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3200', 10);
@@ -33,6 +34,8 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/goals', goalsRouter);
 app.use('/api/reviews', fixRouter);
+app.use('/mcp', mcpRouter);
+log.info('MCP server mounted at /mcp (stateless, per-request server)');
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

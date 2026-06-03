@@ -27,6 +27,12 @@ export default function ReviewView() {
   const [scrubDiff, setScrubDiff] = useState(null);
   const [anchor, setAnchor] = useState(null);
   const [globalCommentOpen, setGlobalCommentOpen] = useState(false);
+  const [hideFixed, setHideFixed] = useState(() => {
+    try { return localStorage.getItem('foreword:hide-fixed') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('foreword:hide-fixed', hideFixed ? '1' : '0'); } catch {}
+  }, [hideFixed]);
 
   async function loadReview() { setReview(await api.reviews.get(reviewId)); }
   async function loadDiff() {
@@ -58,9 +64,31 @@ export default function ReviewView() {
     api.reviews.commitDiff(reviewId, c.hash, scrubMode, ignoreWs).then((d) => setScrubDiff(d.diff));
   }, [scrubIndex, scrubMode, ignoreWs, commits, reviewId]);
 
+  /* When "hide fixed" is on, drop entire threads where ANY comment is
+     fix_status='fixed'. Per-comment hiding would leave the orphaned
+     agent-finding parent visible without its resolved user reply, which
+     is more confusing than just hiding the whole thread. */
+  const hiddenFixedCount = useMemo(() => {
+    if (!hideFixed) return 0;
+    const fixedThreadIds = new Set();
+    for (const c of comments) {
+      if (c.fix_status === 'fixed') fixedThreadIds.add(c.parent_id || c.id);
+    }
+    return comments.filter((c) => fixedThreadIds.has(c.parent_id || c.id)).length;
+  }, [comments, hideFixed]);
+
+  const visibleComments = useMemo(() => {
+    if (!hideFixed) return comments;
+    const fixedThreadIds = new Set();
+    for (const c of comments) {
+      if (c.fix_status === 'fixed') fixedThreadIds.add(c.parent_id || c.id);
+    }
+    return comments.filter((c) => !fixedThreadIds.has(c.parent_id || c.id));
+  }, [comments, hideFixed]);
+
   const commentsByLine = useMemo(() => {
     const map = new Map();
-    for (const c of comments) {
+    for (const c of visibleComments) {
       if (!c.path || !c.line) continue;
       if (!map.has(c.path)) map.set(c.path, new Map());
       const file = map.get(c.path);
@@ -77,9 +105,9 @@ export default function ReviewView() {
       out.set(file, inner);
     }
     return out;
-  }, [comments]);
+  }, [visibleComments]);
 
-  const globalComments = useMemo(() => comments.filter((c) => !c.path), [comments]);
+  const globalComments = useMemo(() => visibleComments.filter((c) => !c.path), [visibleComments]);
 
   const riskByPath = useMemo(() => {
     if (!risk?.files) return new Map();
@@ -147,6 +175,30 @@ export default function ReviewView() {
   /* ── Worktree drift detection ──────────────────────────────────────── */
   const { state: driftState, refresh: refetchDrift } = useDriftPoll(reviewId);
   const [refreshing, setRefreshing] = useState(false);
+
+  /* ── MCP handoff: "Send to agent" ──────────────────────────────────── */
+  const [sending, setSending] = useState(false);
+  const [sentAt, setSentAt] = useState(null);
+  const [sendError, setSendError] = useState(null);
+
+  /* Auto-reset the "sent" indicator after 2s so the button is available
+     again if the agent times out and re-calls wait_for_review_signal. */
+  useEffect(() => {
+    if (!sentAt) return;
+    const t = setTimeout(() => setSentAt(null), 2000);
+    return () => clearTimeout(t);
+  }, [sentAt]);
+
+  async function sendToAgent() {
+    if (!review?.mcp_session_id) return;
+    setSending(true); setSendError(null);
+    try {
+      const r = await api.reviews.signal(reviewId);
+      setSentAt(r.signaled_at);
+    } catch (e) {
+      setSendError(e.message || 'Signal failed');
+    } finally { setSending(false); }
+  }
 
   async function refreshHead() {
     setRefreshing(true);
@@ -231,6 +283,11 @@ export default function ReviewView() {
                 <span className="text-text-muted mx-1.5">←</span>
                 <span className="text-accent-purple">{review.base_ref}</span>
                 <span className="text-text-dim text-[11px] ml-2">{review.base_sha?.slice(0,7)}…{review.head_sha?.slice(0,7)}</span>
+                {review.mcp_session_id && (
+                  <span className="text-[10px] px-2 py-0.5 rounded ml-2 lr-meta-badge-agent" title="This review was opened by an MCP-connected agent">
+                    via MCP
+                  </span>
+                )}
               </div>
             </div>
             <div className="ml-auto flex items-center gap-3 text-xs">
@@ -240,6 +297,15 @@ export default function ReviewView() {
               <label className="flex items-center gap-1.5 text-text-muted whitespace-nowrap cursor-pointer">
                 <input type="checkbox" checked={ignoreWs} onChange={(e) => setIgnoreWs(e.target.checked)} />
                 <span>ignore whitespace</span>
+              </label>
+              <label
+                className="flex items-center gap-1.5 text-text-muted whitespace-nowrap cursor-pointer"
+                title={hideFixed
+                  ? `${hiddenFixedCount} fixed comment${hiddenFixedCount === 1 ? '' : 's'} hidden`
+                  : 'Hide threads whose fix request has been marked fixed'}
+              >
+                <input type="checkbox" checked={hideFixed} onChange={(e) => setHideFixed(e.target.checked)} />
+                <span>hide fixed{hideFixed && hiddenFixedCount > 0 ? ` (${hiddenFixedCount})` : ''}</span>
               </label>
               <select
                 value={outputFormat}
@@ -256,8 +322,27 @@ export default function ReviewView() {
                 title="Refresh the diff against the worktree's current HEAD"
                 className="text-text-muted hover:text-accent whitespace-nowrap disabled:opacity-50"
               >{refreshing ? '↻ …' : '↻ refresh'}</button>
+              {review.mcp_session_id && (
+                <button
+                  onClick={sendToAgent}
+                  disabled={sending || !!sentAt}
+                  title={sentAt
+                    ? 'Sent — agent has been notified. Button will re-enable in 2s.'
+                    : 'Hand the review back to the MCP-connected agent'}
+                  className="bg-accent text-bg font-semibold rounded px-3 py-1 text-xs whitespace-nowrap disabled:opacity-50 hover:brightness-110"
+                >
+                  {sending ? 'Sending…' : sentAt ? '↩ sent' : '↩ Send to agent'}
+                </button>
+              )}
             </div>
           </div>
+          {sendError && (
+            <div className="border-t border-accent-red/40 bg-[color:var(--tint-red)] text-accent-red px-4 py-2 text-xs flex items-center gap-3">
+              <span aria-hidden>⚠</span>
+              <span className="flex-1 text-text"><b>Send to agent failed:</b> {sendError}</span>
+              <button onClick={() => setSendError(null)} className="text-text-muted hover:text-text">✕</button>
+            </div>
+          )}
           {/* Drift banner — surfaces when worktree HEAD has moved */}
           <DriftBanner state={driftState} busy={refreshing} onRefresh={refreshHead} />
           {/* Reading-progress hairline */}

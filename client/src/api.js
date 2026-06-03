@@ -48,6 +48,7 @@ export const api = {
       req(`/api/reviews/${id}/files/${encodeURIComponent(file)}/reviewed`, { method: 'DELETE' }),
     headState: (id) => req(`/api/reviews/${id}/head-state`),
     refreshHead: (id) => req(`/api/reviews/${id}/refresh-head`, { method: 'POST' }),
+    signal: (id) => req(`/api/reviews/${id}/signal`, { method: 'POST' }),
   },
   comments: {
     list: (reviewId) => req(`/api/comments?review_id=${reviewId}`),

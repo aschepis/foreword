@@ -90,6 +90,8 @@ const MIGRATIONS = [
   `ALTER TABLE agent_configs ADD COLUMN kind TEXT NOT NULL DEFAULT 'review'`,
   `ALTER TABLE agent_configs ADD COLUMN provider TEXT`,
   `ALTER TABLE agent_configs ADD COLUMN model TEXT`,
+  `ALTER TABLE reviews ADD COLUMN mcp_session_id TEXT`,
+  `ALTER TABLE reviews ADD COLUMN signaled_at TEXT`,
   `ALTER TABLE comments ADD COLUMN agent_fixable INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE comments ADD COLUMN fix_status TEXT`,
   `ALTER TABLE comments ADD COLUMN fix_commit_sha TEXT`,

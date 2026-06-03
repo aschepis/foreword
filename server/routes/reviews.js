@@ -80,6 +80,24 @@ router.get('/:id/reviewed', (req, res) => {
 });
 
 /**
+ * Hand the review back to the MCP-connected agent that opened it.
+ * Sets signaled_at to now; the agent's wait_for_review_signal long-poll
+ * returns on the next tick. No-op shape if no agent is waiting (the
+ * column just stays set; next wait cycle re-baselines).
+ */
+router.post('/:id/signal', (req, res) => {
+  const review = db.prepare('SELECT id, mcp_session_id FROM reviews WHERE id = ?').get(req.params.id);
+  if (!review) return res.status(404).json({ error: 'review not found' });
+  if (!review.mcp_session_id) {
+    return res.status(400).json({ error: 'this review was not created via MCP — nothing to signal' });
+  }
+  db.prepare(`UPDATE reviews SET signaled_at = datetime('now') WHERE id = ?`).run(review.id);
+  const fresh = db.prepare('SELECT signaled_at FROM reviews WHERE id = ?').get(review.id);
+  log.info(`review #${review.id} signaled to agent at ${fresh.signaled_at}`);
+  res.json({ ok: true, signaled_at: fresh.signaled_at });
+});
+
+/**
  * Inspect whether the worktree's HEAD has moved since the review was created.
  * Returns drift info without modifying anything. Frontend polls this.
  */
