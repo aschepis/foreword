@@ -27,6 +27,12 @@ export default function ReviewView() {
   const [scrubDiff, setScrubDiff] = useState(null);
   const [anchor, setAnchor] = useState(null);
   const [globalCommentOpen, setGlobalCommentOpen] = useState(false);
+  const [hideFixed, setHideFixed] = useState(() => {
+    try { return localStorage.getItem('foreword:hide-fixed') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('foreword:hide-fixed', hideFixed ? '1' : '0'); } catch {}
+  }, [hideFixed]);
 
   async function loadReview() { setReview(await api.reviews.get(reviewId)); }
   async function loadDiff() {
@@ -58,9 +64,31 @@ export default function ReviewView() {
     api.reviews.commitDiff(reviewId, c.hash, scrubMode, ignoreWs).then((d) => setScrubDiff(d.diff));
   }, [scrubIndex, scrubMode, ignoreWs, commits, reviewId]);
 
+  /* When "hide fixed" is on, drop entire threads where ANY comment is
+     fix_status='fixed'. Per-comment hiding would leave the orphaned
+     agent-finding parent visible without its resolved user reply, which
+     is more confusing than just hiding the whole thread. */
+  const hiddenFixedCount = useMemo(() => {
+    if (!hideFixed) return 0;
+    const fixedThreadIds = new Set();
+    for (const c of comments) {
+      if (c.fix_status === 'fixed') fixedThreadIds.add(c.parent_id || c.id);
+    }
+    return comments.filter((c) => fixedThreadIds.has(c.parent_id || c.id)).length;
+  }, [comments, hideFixed]);
+
+  const visibleComments = useMemo(() => {
+    if (!hideFixed) return comments;
+    const fixedThreadIds = new Set();
+    for (const c of comments) {
+      if (c.fix_status === 'fixed') fixedThreadIds.add(c.parent_id || c.id);
+    }
+    return comments.filter((c) => !fixedThreadIds.has(c.parent_id || c.id));
+  }, [comments, hideFixed]);
+
   const commentsByLine = useMemo(() => {
     const map = new Map();
-    for (const c of comments) {
+    for (const c of visibleComments) {
       if (!c.path || !c.line) continue;
       if (!map.has(c.path)) map.set(c.path, new Map());
       const file = map.get(c.path);
@@ -77,9 +105,9 @@ export default function ReviewView() {
       out.set(file, inner);
     }
     return out;
-  }, [comments]);
+  }, [visibleComments]);
 
-  const globalComments = useMemo(() => comments.filter((c) => !c.path), [comments]);
+  const globalComments = useMemo(() => visibleComments.filter((c) => !c.path), [visibleComments]);
 
   const riskByPath = useMemo(() => {
     if (!risk?.files) return new Map();
@@ -269,6 +297,15 @@ export default function ReviewView() {
               <label className="flex items-center gap-1.5 text-text-muted whitespace-nowrap cursor-pointer">
                 <input type="checkbox" checked={ignoreWs} onChange={(e) => setIgnoreWs(e.target.checked)} />
                 <span>ignore whitespace</span>
+              </label>
+              <label
+                className="flex items-center gap-1.5 text-text-muted whitespace-nowrap cursor-pointer"
+                title={hideFixed
+                  ? `${hiddenFixedCount} fixed comment${hiddenFixedCount === 1 ? '' : 's'} hidden`
+                  : 'Hide threads whose fix request has been marked fixed'}
+              >
+                <input type="checkbox" checked={hideFixed} onChange={(e) => setHideFixed(e.target.checked)} />
+                <span>hide fixed{hideFixed && hiddenFixedCount > 0 ? ` (${hiddenFixedCount})` : ''}</span>
               </label>
               <select
                 value={outputFormat}
