@@ -102,9 +102,21 @@ export async function createReview({ repo_path, base_ref, head_ref, worktree_pat
      numbers in JS handle ids up to 2^53; row counts get there in trillions,
      so the coercion is safe. */
   const reviewId = Number(info.lastInsertRowid);
-  const url = `${publicBaseUrl()}/reviews/${reviewId}`;
-  if (launch) openBrowser(url);
-  log.info(`MCP created review #${reviewId} ${baseRef}…${head_ref} session=${sessionId} launched=${launch}`);
+  const baseUrl = `${publicBaseUrl()}/reviews/${reviewId}`;
+
+  /* In on-demand stdio mode we launch a Chromium app-mode window so that
+     "Send to agent" can actually auto-close it (browsers block
+     window.close() on normal tabs). The ?app=1 hint tells the UI the
+     auto-close path is available. */
+  const stdioMode = process.env.FOREWORD_MCP_STDIO === '1';
+  let appMode = false;
+  if (launch) {
+    const url = stdioMode ? `${baseUrl}?app=1` : baseUrl;
+    const res = openBrowser(url, { app: stdioMode });
+    appMode = res.appMode;
+  }
+  const url = appMode ? `${baseUrl}?app=1` : baseUrl;
+  log.info(`MCP created review #${reviewId} ${baseRef}…${head_ref} session=${sessionId} launched=${launch} appMode=${appMode}`);
 
   return {
     review_id: reviewId,
@@ -116,6 +128,7 @@ export async function createReview({ repo_path, base_ref, head_ref, worktree_pat
     head_ref,
     mcp_session_id: sessionId,
     launched: !!launch,
+    app_mode: appMode,
   };
 }
 
@@ -244,8 +257,9 @@ export async function markCommentFixed({ comment_id, commit_sha, message }) {
 /* ─── wait_for_review_signal ─────────────────────────────────────── */
 
 /**
- * Long-poll on reviews.signaled_at. Returns when:
- *   - signaled_at is non-null AND newer than the wait start, OR
+ * Long-poll on a review's terminal columns. Returns when:
+ *   - signaled_at advances past the wait start (user clicked "Send to agent"), OR
+ *   - closed_at advances past the wait start (user closed the review window), OR
  *   - the timeout elapses.
  *
  * Always queries by review id (not session id) since the session id is
@@ -259,7 +273,7 @@ export async function markCommentFixed({ comment_id, commit_sha, message }) {
  */
 export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }, signal) {
   if (!review_id) throw new Error('review_id is required');
-  const review = db.prepare('SELECT id, mcp_session_id, signaled_at FROM reviews WHERE id = ?').get(review_id);
+  const review = db.prepare('SELECT id, mcp_session_id, signaled_at, closed_at FROM reviews WHERE id = ?').get(review_id);
   if (!review) throw new Error(`review #${review_id} not found`);
   if (!review.mcp_session_id) {
     throw new Error(`review #${review_id} was not created via MCP — cannot wait`);
@@ -269,6 +283,7 @@ export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }, 
   const timeoutMs = Math.min(Math.max(timeout_seconds, 1), 600) * 1000;
   const startedAt = Date.now();
   const baselineSignaledAt = review.signaled_at;
+  const baselineClosedAt = review.closed_at;
 
   /* Polling cadence: 750ms is responsive enough to feel snappy without
      pegging the SQLite handle.
@@ -280,10 +295,13 @@ export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }, 
   while (Date.now() - startedAt < timeoutMs) {
     if (signal?.aborted) break;
     const fresh = db
-      .prepare('SELECT signaled_at FROM reviews WHERE id = ?')
+      .prepare('SELECT signaled_at, closed_at FROM reviews WHERE id = ?')
       .get(review_id);
     if (fresh?.signaled_at && fresh.signaled_at !== baselineSignaledAt) {
-      return buildSignalReturn(review_id, fresh.signaled_at, /* signaled */ true);
+      return buildSignalReturn(review_id, fresh.signaled_at, 'signaled');
+    }
+    if (fresh?.closed_at && fresh.closed_at !== baselineClosedAt) {
+      return buildSignalReturn(review_id, fresh.closed_at, 'window_closed');
     }
     /* Abortable sleep: if the transport closes mid-tick we wake up
        immediately rather than sitting on a 750ms timer. */
@@ -300,10 +318,15 @@ export async function waitForReviewSignal({ review_id, timeout_seconds = 300 }, 
   }
 
   /* Timeout (or abort) — return cleanly. */
-  return buildSignalReturn(review_id, baselineSignaledAt, /* signaled */ false);
+  return buildSignalReturn(review_id, baselineSignaledAt, 'timeout');
 }
 
-function buildSignalReturn(reviewId, signaledAt, signaled) {
+/**
+ * @param {number} reviewId
+ * @param {string|null} at  the timestamp of whichever terminal event fired
+ * @param {'signaled'|'window_closed'|'timeout'} reason
+ */
+function buildSignalReturn(reviewId, at, reason) {
   const review = db.prepare('SELECT head_sha FROM reviews WHERE id = ?').get(reviewId);
   const counts = db
     .prepare(
@@ -315,8 +338,12 @@ function buildSignalReturn(reviewId, signaledAt, signaled) {
     )
     .get(reviewId);
   return {
-    signaled,
-    signaled_at: signaledAt || null,
+    /* signaled stays true for any actionable hand-back (button OR window
+       close) and false only on timeout, so existing agents that just check
+       `signaled` keep working. reason disambiguates for newer callers. */
+    signaled: reason !== 'timeout',
+    reason,
+    signaled_at: at || null,
     summary: {
       total_comments: counts.total || 0,
       fixable_pending: counts.fixable_pending || 0,

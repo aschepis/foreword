@@ -98,6 +98,24 @@ router.post('/:id/signal', (req, res) => {
 });
 
 /**
+ * Hand the review back because the user closed the review window. Fired by
+ * the UI via navigator.sendBeacon on pagehide (so it survives unload — the
+ * request has no body, we read only :id). Sets closed_at; the agent's
+ * wait_for_review_signal long-poll returns with reason='window_closed'.
+ */
+router.post('/:id/closed', (req, res) => {
+  const review = db.prepare('SELECT id, mcp_session_id FROM reviews WHERE id = ?').get(req.params.id);
+  if (!review) return res.status(404).json({ error: 'review not found' });
+  if (!review.mcp_session_id) {
+    return res.status(400).json({ error: 'this review was not created via MCP — nothing to signal' });
+  }
+  db.prepare(`UPDATE reviews SET closed_at = datetime('now') WHERE id = ?`).run(review.id);
+  const fresh = db.prepare('SELECT closed_at FROM reviews WHERE id = ?').get(review.id);
+  log.info(`review #${review.id} window closed at ${fresh.closed_at}`);
+  res.json({ ok: true, closed_at: fresh.closed_at });
+});
+
+/**
  * Inspect whether the worktree's HEAD has moved since the review was created.
  * Returns drift info without modifying anything. Frontend polls this.
  */

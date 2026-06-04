@@ -50,9 +50,11 @@ function bind(name, impl) {
 
 /**
  * Build a fresh MCP server instance with all Foreword tools registered.
- * Called per HTTP request — registration is cheap (microseconds).
+ * Called per HTTP request (registration is cheap, microseconds) and once
+ * by the stdio entry point (server/mcp-stdio.js) which connects it to a
+ * StdioServerTransport instead of the HTTP transport.
  */
-function buildServer() {
+export function buildServer() {
   const mcp = new McpServer(
     { name: 'foreword', version: '0.1.0' },
     { capabilities: { tools: {} } }
@@ -104,9 +106,12 @@ function buildServer() {
 
   mcp.registerTool('wait_for_review_signal', {
     description:
-      'Block until the user clicks "Send to agent" in the Foreword UI. Long-polls server-side; ' +
-      'returns with signaled=true on submit, or signaled=false on timeout (default 300s, max 600s). ' +
-      'You can re-call after a timeout. The return summary tells you what shape the review is in.',
+      'Block until the user hands the review back — either by clicking "Send to agent" OR by ' +
+      'closing the review window. Long-polls server-side; returns signaled=true with ' +
+      'reason="signaled" or reason="window_closed" on hand-back, or signaled=false with ' +
+      'reason="timeout" after the timeout (default 300s, max 600s). You can re-call after a ' +
+      'timeout. The return summary tells you what shape the review is in. Treat both hand-back ' +
+      'reasons as actionable.',
     inputSchema: {
       review_id:       z.number(),
       timeout_seconds: z.number().min(1).max(600).optional().describe('Default 300.'),

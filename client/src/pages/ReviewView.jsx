@@ -202,6 +202,11 @@ export default function ReviewView() {
   const [sending, setSending] = useState(false);
   const [sentAt, setSentAt] = useState(null);
   const [sendError, setSendError] = useState(null);
+  const [canClose, setCanClose] = useState(false);
+
+  /* Once we've handed the review back via the button, don't also fire the
+     "window closed" beacon on unload — the agent already got the signal. */
+  const handedOffRef = useRef(false);
 
   /* Auto-reset the "sent" indicator after 2s so the button is available
      again if the agent times out and re-calls wait_for_review_signal. */
@@ -211,12 +216,33 @@ export default function ReviewView() {
     return () => clearTimeout(t);
   }, [sentAt]);
 
+  /* Closing the review window is itself a hand-back: notify the agent's
+     wait_for_review_signal so it returns with reason="window_closed". Must
+     use sendBeacon (not fetch) so the request survives page unload. Skip if
+     we already signaled via the button. MCP reviews only. */
+  useEffect(() => {
+    if (!review?.mcp_session_id) return;
+    function onLeave() {
+      if (handedOffRef.current) return;
+      try { navigator.sendBeacon(`/api/reviews/${reviewId}/closed`); } catch {}
+    }
+    window.addEventListener('pagehide', onLeave);
+    return () => window.removeEventListener('pagehide', onLeave);
+  }, [review?.mcp_session_id, reviewId]);
+
   async function sendToAgent() {
     if (!review?.mcp_session_id) return;
     setSending(true); setSendError(null);
     try {
       const r = await api.reviews.signal(reviewId);
+      handedOffRef.current = true;
       setSentAt(r.signaled_at);
+      /* "Send to agent" closes the window. Allowed in an app-mode window;
+         a no-op in a normal tab, where we surface a "you can close" hint. */
+      setTimeout(() => {
+        window.close();
+        setCanClose(true);
+      }, 150);
     } catch (e) {
       setSendError(e.message || 'Signal failed');
     } finally { setSending(false); }
@@ -363,6 +389,12 @@ export default function ReviewView() {
               <span aria-hidden>⚠</span>
               <span className="flex-1 text-text"><b>Send to agent failed:</b> {sendError}</span>
               <button onClick={() => setSendError(null)} className="text-text-muted hover:text-text">✕</button>
+            </div>
+          )}
+          {canClose && (
+            <div className="border-t border-accent/40 bg-[color:var(--tint-accent,rgba(0,0,0,0.04))] text-text px-4 py-2 text-xs flex items-center gap-3">
+              <span aria-hidden>✓</span>
+              <span className="flex-1">Sent to agent — you can close this window.</span>
             </div>
           )}
           {/* Drift banner — surfaces when worktree HEAD has moved */}

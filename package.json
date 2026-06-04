@@ -19,6 +19,7 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "node server/index.js",
+    "mcp:stdio": "node server/mcp-stdio.js",
     "postinstall": "echo 'run: pnpm build && pnpm start (or pnpm dev)'"
   },
   "dependencies": {

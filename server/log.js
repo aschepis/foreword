@@ -20,6 +20,15 @@ function ts() {
   return c.dim(new Date().toISOString().slice(11, 23));
 }
 
+/* Single sink for all log output. In stdio MCP mode (FOREWORD_MCP_STDIO=1)
+   stdout is reserved for the JSON-RPC protocol stream — any stray write
+   there corrupts it — so route every line to stderr instead. */
+function write(line) {
+  if (process.env.FOREWORD_MCP_STDIO === '1') process.stderr.write(line + '\n');
+  // eslint-disable-next-line no-console
+  else console.log(line);
+}
+
 function fmt(parts) {
   return parts
     .map((p) => {
@@ -31,8 +40,7 @@ function fmt(parts) {
 }
 
 function lvl(label, color, ...parts) {
-  // eslint-disable-next-line no-console
-  console.log(`${ts()} ${color(label)} ${fmt(parts)}`);
+  write(`${ts()} ${color(label)} ${fmt(parts)}`);
 }
 
 export const log = {
@@ -53,8 +61,7 @@ export function requestLogger() {
       const status = res.statusCode;
       const statusColor = status >= 500 ? c.red : status >= 400 ? c.yellow : status >= 300 ? c.cyan : c.green;
       const len = res.getHeader('content-length');
-      // eslint-disable-next-line no-console
-      console.log(
+      write(
         `${ts()} ${c.dim('HTTP')} ${statusColor(String(status))} ${c.bold(req.method.padEnd(4))} ${req.originalUrl} ${c.dim(`${ms}ms`)}${len ? c.dim(` ${len}b`) : ''}`
       );
     });
@@ -63,8 +70,7 @@ export function requestLogger() {
 }
 
 export function banner(port, dbPath) {
-  // eslint-disable-next-line no-console
-  console.log(`
+  write(`
 ${c.bold(c.magenta('▌'))} ${c.bold('foreword')} ${c.dim('— self-review for the agentic era')}
   ${c.dim('server')}  http://localhost:${c.bold(port)}
   ${c.dim('db    ')}  ${dbPath}

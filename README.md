@@ -302,13 +302,38 @@ session that wrote the code in the first place.
 
 ### Setup
 
-Foreword must already be running. Then:
+There are two ways to connect an agent. Pick one.
+
+**Persistent mode** — you keep a Foreword server running and the agent
+connects to it over HTTP:
 
 ```bash
+# Foreword must already be running (pnpm start)
 claude mcp add --transport http foreword http://localhost:3200/mcp
 ```
 
 (Adjust the URL if you've moved Foreword to a different port.)
+
+**On-demand (stdio) mode** — no server to keep running; the agent
+launches Foreword itself as a subprocess when it needs it:
+
+```bash
+claude mcp add foreword -- node /abs/path/to/foreword/server/mcp-stdio.js
+```
+
+In this mode the MCP process boots the Foreword web server in-process
+(on an ephemeral port, so it never collides with a persistent instance
+on 3200) and opens the review for you. The server lives for the agent
+session and exits when the agent disconnects. Two differences from
+persistent mode:
+
+- The review opens in a **Chromium app-mode window** when one is
+  available (Chrome / Edge / Brave / Chromium), so that **"Send to
+  agent" can auto-close the window** afterward. Browsers block
+  `window.close()` on ordinary tabs, so without a Chromium browser the
+  window stays open with a "you can close this window" hint instead.
+- **Closing the review window** hands the review back too — same as
+  clicking "Send to agent" (see `wait_for_review_signal` below).
 
 ### Tools
 
@@ -318,7 +343,7 @@ claude mcp add --transport http foreword http://localhost:3200/mcp
 | `list_comments` | List all comments on a review. Optional filter: `all`, `fixable_pending`, `human`, `agent_findings`. |
 | `get_fixable_work` | Return comments the user flagged as agent-fixable and not yet addressed. Each item includes `thread_markdown` — a pre-rendered conversation so you don't have to walk `parent_id` chains. |
 | `mark_comment_fixed` | After applying a fix and committing, mark the comment so future calls skip it. `commit_sha` is recorded as audit trail. |
-| `wait_for_review_signal` | Long-poll. Blocks until the user clicks "Send to agent" in the review UI, or until the timeout expires (default 300s, max 600s). Re-callable. |
+| `wait_for_review_signal` | Long-poll. Blocks until the user hands the review back — either by clicking "Send to agent" *or* by closing the review window — or until the timeout expires (default 300s, max 600s). Returns `reason` (`signaled` \| `window_closed` \| `timeout`); `signaled` is true for both hand-back reasons. Re-callable. |
 
 ### The handoff loop
 
